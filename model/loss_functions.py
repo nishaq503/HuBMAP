@@ -1,12 +1,12 @@
 import numpy as np
 import tensorflow as tf
+import tensorflow_addons as tfa
 
 
-def _pairwise_distances_embeddings(embeddings: tf.Tensor, squared: bool = False):
+def _pairwise_distances_embeddings(embeddings: tf.Tensor):
     """ Pairwise distances between flat embeddings.
 
     :param embeddings: tf.float32 tensor with shape (batch_size, embedding_dim)
-    :param squared: whether to use squared distances
     :return: tf.float32 tensor with shape (batch_size, batch_size) of pairwise distances.
     """
     # Get the dot product between all embeddings
@@ -21,13 +21,11 @@ def _pairwise_distances_embeddings(embeddings: tf.Tensor, squared: bool = False)
 
     # Because of floating-point errors, some distances might be negative so we set everything >= 0.0
     distances = tf.maximum(distances, 0.0)
-
-    if not squared:
-        # sqrt(0) has inf gradient so avoid this by adding a small epsilon
-        mask = tf.cast(tf.equal(distances, 0.0), tf.float32)
-        distances = tf.sqrt(distances + mask * 1e-16)
-        # Correct for the epsilon added set the distances on the mask to be exactly 0.0
-        distances = distances * (1.0 - mask)
+    # sqrt(0) has inf gradient so avoid this by adding a small epsilon
+    mask = tf.cast(tf.equal(distances, 0.0), tf.float32)
+    distances = tf.sqrt(distances + mask * 1e-16)
+    # Correct for the epsilon added set the distances on the mask to be exactly 0.0
+    distances = distances * (1.0 - mask)
 
     return distances
 
@@ -46,7 +44,6 @@ def _pairwise_distances_masks(masks: tf.Tensor):
 def embedding_loss(
         masks: tf.Tensor,
         embeddings: tf.Tensor,
-        squared: bool = False,
 ):
     """ Computes the loss for the embeddings.
 
@@ -55,15 +52,12 @@ def embedding_loss(
 
     :param masks: tf.int32 tensor with shape (batch_size, image_height, image_width)
     :param embeddings: tf.float32 tensor with shape (batch_size, embedding_dim)
-    :param squared: bool. whether to use squared distances and squared differences between distances.
     :return: tf.float32 scalar Mean Absolute/Squared Error between embedding distances and mask distances.
     """
     masks_distances = tf.cast(_pairwise_distances_masks(masks), tf.float32)
-    embeddings_distances = _pairwise_distances_embeddings(embeddings, squared)
+    embeddings_distances = _pairwise_distances_embeddings(embeddings)
 
     differences = tf.abs(masks_distances - embeddings_distances)
-    if squared:
-        differences = tf.square(differences)
 
     size = tf.shape(masks)
     factor = tf.cast(size[1] * size[2], dtype=tf.float32)
@@ -74,7 +68,6 @@ def embedding_loss(
 def masking_loss(
         true_masks: tf.Tensor,
         predicted_masks: tf.Tensor,
-        squared: bool = False,
         smoothed: bool = True,
 ):
     """ Mean Absolute/Squared Error loss between true masks and predicted masks.
@@ -83,17 +76,23 @@ def masking_loss(
                         tf.int32 tensor with shape (batch_size, image_height, image_width)
     :param predicted_masks: predicted segmentation masks for images
                         tf.float32 tensor with shape (batch_size, image_height, image_width, 1)
-    :param squared: Whether to use squared error
     :param smoothed: Whether to smooth the predicted masks with a gaussian filter.
-    :return:
+    :return: tf.float32 scalar Mean Absolute/Squared Error between true masks and predicted masks.
     """
-    pass
+    true_masks = tf.cast(true_masks, tf.float32)
+    if smoothed is True:
+        predicted_masks = tfa.image.gaussian_filter2d(
+            image=predicted_masks,
+            filter_shape=7,
+            padding='reflect',
+        )
+    differences = tf.abs(true_masks - predicted_masks)
+    return tf.reduce_mean(differences)
 
 
 # noinspection DuplicatedCode
 def _test_pairwise_distances_embeddings():
-    batch_size = 32
-    embedding_dim = 64
+    batch_size, embedding_dim = 32, 64
     embeddings = np.random.uniform(size=(batch_size, embedding_dim))
     results = np.zeros(shape=(batch_size, batch_size), dtype=np.float32)
     for i in range(batch_size):
@@ -104,14 +103,14 @@ def _test_pairwise_distances_embeddings():
     tf_results = _pairwise_distances_embeddings(tf_embeddings)
     tf_results = np.asarray(tf_results)
 
-    assert np.allclose(results, tf_results), f'results were different:\n{results}\n\n{tf_results}'
+    assert np.allclose(results, tf_results, 1e-3, 1e-3), f'results were different:\n{results}\n\n{tf_results}'
     return
 
 
 # noinspection DuplicatedCode
 def _test_pairwise_distances_masks():
-    batch_size = 32
-    masks = np.random.randint(low=0, high=2, size=(batch_size, 256, 256), dtype=np.int32)
+    batch_size, image_size = 32, 512
+    masks = np.random.randint(low=0, high=2, size=(batch_size, image_size, image_size), dtype=np.int32)
     results = np.zeros(shape=(batch_size, batch_size), dtype=np.int32)
     for i in range(batch_size):
         for j in range(batch_size):
@@ -127,7 +126,7 @@ def _test_pairwise_distances_masks():
 
 # noinspection DuplicatedCode
 def _test_embedding_loss():
-    batch_size, embedding_dim, image_size = 16, 64, 1024
+    batch_size, embedding_dim, image_size = 16, 64, 512
 
     masks = np.random.randint(low=0, high=2, size=(batch_size, image_size, image_size), dtype=np.int32)
     masks_distances = np.zeros(shape=(batch_size, batch_size), dtype=np.int32)
@@ -147,15 +146,32 @@ def _test_embedding_loss():
     tf_masks = tf.convert_to_tensor(masks, dtype=tf.float32)
     tf_embeddings = tf.convert_to_tensor(embeddings, dtype=tf.float32)
     tf_results = embedding_loss(tf_masks, tf_embeddings)
-    assert np.allclose(results, tf_results), f'results were different:\n{results}\n\n{tf_results}'
+    assert np.allclose(results, tf_results, 1e-3, 1e-3), f'results were different:\n{results}\n\n{tf_results}'
     return
 
 
 def _test_masking_loss():
-    pass
+    batch_size, image_size = 16, 512
+
+    true_masks = np.random.randint(low=0, high=2, size=(batch_size, image_size, image_size), dtype=np.int32)
+    pred_masks = np.random.randint(low=0, high=2, size=(batch_size, image_size, image_size), dtype=np.int32)
+
+    mask_distances = np.zeros(shape=(batch_size, batch_size), dtype=np.float32)
+    for i in range(batch_size):
+        for j in range(batch_size):
+            mask_distances[i, j] = np.mean(np.sqrt(np.abs(true_masks[i] - pred_masks[j])))
+
+    results = np.mean(mask_distances)
+
+    tf_true_masks = tf.convert_to_tensor(true_masks, dtype=tf.float32)
+    tf_pred_masks = tf.convert_to_tensor(pred_masks, dtype=tf.float32)
+    tf_results = masking_loss(tf_true_masks, tf_pred_masks)
+    assert np.allclose(results, tf_results, 1e-3, 1e-3), f'results were different:\n{results}\n\n{tf_results}'
+    return
 
 
 if __name__ == '__main__':
-    # _test_pairwise_distances_embeddings()
-    # _test_pairwise_distances_masks()
+    _test_pairwise_distances_embeddings()
+    _test_pairwise_distances_masks()
     _test_embedding_loss()
+    _test_masking_loss()

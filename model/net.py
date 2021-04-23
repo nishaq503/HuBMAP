@@ -6,6 +6,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
+from loss_functions import embedding_loss
+from loss_functions import masking_loss
 from model import utils
 
 
@@ -70,7 +72,7 @@ class HubmapMasker(keras.models.Model):
             x = keras.layers.Dropout(self.dropout_rate)(x)
 
         x = keras.layers.Conv2DTranspose(1, self.filter_sizes, padding='same')(x)
-        decoder_output = keras.layers.Activation('sigmoid', name='decoder_output')(x)
+        decoder_output = keras.layers.Activation('sigmoid', name='masking')(x)
 
         self.masker = keras.models.Model(
             inputs=input_layer,
@@ -78,49 +80,38 @@ class HubmapMasker(keras.models.Model):
             name='masker',
         )
 
-        self.hubmap_model = keras.models.Model(
+        self.model = keras.models.Model(
             inputs=input_layer,
             outputs=[encoder_output, decoder_output],
-            name='hubmap_model',
+            name='model',
         )
 
     def call(self, inputs, training=None, mask=None):
         return self.masker(inputs)
 
     def summary(self, **kwargs):
-        return self.hubmap_model.summary(**kwargs)
+        return self.model.summary(**kwargs)
 
-    def compile(self, **kwargs):
-        pass
-        # if triplet_margin < 0:
-        #     raise ValueError(f'triplet margin must be a non-negative float. Got {triplet_margin}')
-        # if triplet_percentile is not None:
-        #     if not (0. <= triplet_percentile <= 100.):
-        #         raise ValueError(f'triplet percentile must be a float in the [0, 100] range. Got {triplet_percentile}')
-        #
-        # def loss_fn(labels, embeddings):
-        #     return loss_functions.batch_percentile_triplet_loss(
-        #         labels,
-        #         embeddings,
-        #         margin=triplet_margin,
-        #         squared=True,
-        #         percentile=triplet_percentile,
-        #     )
-        # losses = {
-        #     'encoder': loss_fn,
-        #     'decoder': decoder_loss,
-        #     'classifier': classifier_loss,
-        # }
-        # weights = {
-        #     'encoder': 1.0,
-        #     'decoder': 1.0,
-        #     'classifier': 1.0,
-        # } if weights is None else weights
-        # metrics = {
-        #     'classifier': keras.metrics.AUC(name='auc'),
-        # } if metrics is None else metrics
-        #
-        # return self.model.compile(**kwargs)
+    # noinspection PyMethodOverriding
+    def compile(
+            self, *,
+            optimizer='adam',
+            loss=None,
+            weights=None,
+            metrics=None,
+    ):
+        if loss is None:
+            loss = {
+                'embedding': embedding_loss,
+                'masking': masking_loss,
+            }
+
+        return self.model.compile(
+            optimizer=optimizer,
+            loss=loss,
+            loss_weights=weights,
+            metrics=metrics
+        )
 
     def fit(self, **kwargs):
         if kwargs['callbacks'] is None:
@@ -176,47 +167,37 @@ class HubmapMasker(keras.models.Model):
 
 
 def test_model_and_save():
-    # shape = (100, 1024, 1024, 3)
-    # positive = tf.random.normal(shape=shape, mean=5.0, stddev=1.0)
-    # negative = tf.random.normal(shape=shape, mean=10.0, stddev=2.0)
+    image_shape = (128, 1024, 1024, 3)
+    images = tf.random.uniform(shape=image_shape)
+    masks = tf.cast(tf.random.uniform(shape=tuple(image_shape[:-1])) > 0.5, dtype=tf.int32)
 
-    # positive_labels = np.ones(shape=(shape[0],), dtype=np.uint8)
-    # negative_labels = np.zeros(shape=(shape[0],), dtype=np.uint8)
-
-    # positive_labels = tf.convert_to_tensor(positive_labels)
-    # negative_labels = tf.convert_to_tensor(negative_labels)
-
-    # train_x = tf.concat([positive, negative], axis=0)
-    # train_y = tf.concat([positive_labels, negative_labels], axis=0)
-
-    # ys = {
-    #     'encoder': train_y,
-    #     'decoder': train_x,
-    #     'classifier': train_y,
-    # }
+    ys = {
+        'embedding': masks,
+        'masking': masks,
+    }
 
     model = HubmapMasker(
         model_name='test_model',
-        image_size=1024,
-        num_channels=3,
+        image_size=image_shape[1],
+        num_channels=image_shape[3],
         embedding_dim=64,
         filter_sizes=7,
-        filters=[16, 32, 64, 128],
-        strides=[4, 4, 4, 2],
+        filters=[8, 16, 24, 32],
+        strides=[2, 4, 4, 4],
         dropout_rate=0.25,
     )
     model.summary()
 
-    # model.compile(triplet_margin=64.0)
-    # model.fit(
-    #     x=train_x,
-    #     y=ys,
-    #     batch_size=32,
-    #     epochs=2,
-    #     verbose=1,
-    #     validation_split=0.25,
-    # )
-    # model.save()
+    model.compile()
+    model.fit(
+        x=images,
+        y=ys,
+        batch_size=16,
+        epochs=2,
+        verbose=1,
+        callbacks=None,
+    )
+    model.save()
     return
 
 
@@ -230,6 +211,12 @@ def test_model_and_save():
 
 
 if __name__ == '__main__':
+    import shutil
+
+    for _dir in [utils.LOGS_DIR, utils.MODELS_DIR]:
+        shutil.rmtree(_dir)
+        os.makedirs(_dir, exist_ok=True)
+
     test_model_and_save()
     # print(test_load_model())
     pass
