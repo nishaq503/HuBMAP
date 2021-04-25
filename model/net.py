@@ -2,12 +2,11 @@ import json
 import os
 from typing import List
 
-import numpy as np
 import tensorflow as tf
+import tensorflow_addons as tfa
 from tensorflow import keras
 
 from loss_functions import embedding_loss
-from loss_functions import masking_loss
 from model import utils
 
 
@@ -17,15 +16,11 @@ class HubmapMasker(keras.models.Model):
             model_name: str,
             image_size: int,
             num_channels: int,
-            embedding_dim: int,
             filter_sizes: int,
             filters: List[int],
-            strides: List[int],
+            strides: int,
             dropout_rate: float = 0.25,
     ):
-        if len(filters) != len(strides):
-            raise ValueError(f'filters and strides must be lists with the same lengths.')
-
         super(HubmapMasker, self).__init__()
 
         # store arguments for config
@@ -33,7 +28,6 @@ class HubmapMasker(keras.models.Model):
         self.image_size = image_size
         self.num_channels = num_channels
         self.image_shape = (image_size, image_size, num_channels)
-        self.embedding_dim = embedding_dim
         self.filter_sizes = filter_sizes
         self.filters = filters
         self.strides = strides
@@ -43,18 +37,16 @@ class HubmapMasker(keras.models.Model):
         input_layer = keras.layers.Input(shape=self.image_shape, name='input')
         x = input_layer
 
-        units = list(zip(self.filters, self.strides))
-        for f, s in units:
-            x = keras.layers.Conv2D(f, self.filter_sizes, s, padding='same')(x)
-            x = keras.layers.LeakyReLU(alpha=0.2)(x)
+        for i, f in enumerate(self.filters):
+            x = keras.layers.Conv2D(f, self.filter_sizes, self.strides, padding='same')(x)
             x = keras.layers.BatchNormalization()(x)
-            x = keras.layers.Dropout(self.dropout_rate)(x)
+            x = keras.layers.Activation('relu')(x)
+            if i < len(self.filters) - 1:
+                x = keras.layers.Dropout(self.dropout_rate)(x)
+            else:
+                x = keras.layers.Dropout(self.dropout_rate, name='embedding')(x)
 
-        volume_size = keras.backend.int_shape(x)
-
-        x = keras.layers.Flatten()(x)
-        encoder_output = keras.layers.Dense(self.embedding_dim, name='embedding')(x)
-
+        encoder_output = x
         self.encoder = keras.models.Model(
             inputs=input_layer,
             outputs=encoder_output,
@@ -62,16 +54,18 @@ class HubmapMasker(keras.models.Model):
         )
 
         # set up decoder
-        x = keras.layers.Dense(units=np.prod(volume_size[1:]))(encoder_output)
-        x = keras.layers.Reshape(target_shape=(volume_size[1], volume_size[2], volume_size[3]))(x)
-
-        for f, s in reversed(units):
-            x = keras.layers.Conv2DTranspose(f, self.filter_sizes, s, padding='same')(x)
-            x = keras.layers.LeakyReLU(alpha=0.2)(x)
+        for f in reversed(self.filters):
+            x = keras.layers.Conv2DTranspose(f, self.filter_sizes, self.strides, padding='same')(x)
             x = keras.layers.BatchNormalization()(x)
+            x = keras.layers.Activation('relu')(x)
             x = keras.layers.Dropout(self.dropout_rate)(x)
 
         x = keras.layers.Conv2DTranspose(1, self.filter_sizes, padding='same')(x)
+        x = keras.layers.Lambda(lambda arg: tfa.image.gaussian_filter2d(
+            image=arg,
+            filter_shape=7,
+            padding='reflect',
+        ), name='smoothing')(x)
         decoder_output = keras.layers.Activation('sigmoid', name='masking')(x)
 
         self.masker = keras.models.Model(
@@ -103,7 +97,7 @@ class HubmapMasker(keras.models.Model):
         if loss is None:
             loss = {
                 'embedding': embedding_loss,
-                'masking': masking_loss,
+                'masking': 'mae',
             }
 
         return self.model.compile(
@@ -140,7 +134,6 @@ class HubmapMasker(keras.models.Model):
             'model_name': self.model_name,
             'image_size': self.image_size,
             'num_channels': self.num_channels,
-            'embedding_dim': self.embedding_dim,
             'filter_sizes': self.filter_sizes,
             'filters': self.filters,
             'strides': self.strides,
@@ -167,7 +160,7 @@ class HubmapMasker(keras.models.Model):
 
 
 def test_model_and_save():
-    image_shape = (128, 1024, 1024, 3)
+    image_shape = (128, 256, 256, 3)
     images = tf.random.uniform(shape=image_shape)
     masks = tf.cast(tf.random.uniform(shape=tuple(image_shape[:-1])) > 0.5, dtype=tf.int32)
 
@@ -180,13 +173,13 @@ def test_model_and_save():
         model_name='test_model',
         image_size=image_shape[1],
         num_channels=image_shape[3],
-        embedding_dim=64,
-        filter_sizes=7,
-        filters=[8, 16, 24, 32],
-        strides=[2, 4, 4, 4],
+        filter_sizes=3,
+        filters=[32 * (i + 1) for i in range(5)],
+        strides=2,
         dropout_rate=0.25,
     )
     model.summary()
+    exit(1)
 
     model.compile()
     model.fit(
