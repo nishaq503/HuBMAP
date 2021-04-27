@@ -18,8 +18,9 @@ class HubmapMasker(keras.models.Model):
             num_channels: int,
             filter_sizes: int,
             filters: List[int],
-            strides: int,
-            dropout_rate: float = 0.25,
+            pool_size: int,
+            smoothing_size: int,
+            dropout_rate: float,
     ):
         super(HubmapMasker, self).__init__()
 
@@ -30,21 +31,22 @@ class HubmapMasker(keras.models.Model):
         self.image_shape = (image_size, image_size, num_channels)
         self.filter_sizes = filter_sizes
         self.filters = filters
-        self.strides = strides
+        self.pool_size = pool_size
+        self.smoothing_size = smoothing_size
         self.dropout_rate = dropout_rate
 
         # set up encoder
         input_layer = keras.layers.Input(shape=self.image_shape, name='input')
         x = input_layer
 
-        for i, f in enumerate(self.filters):
-            x = keras.layers.Conv2D(f, self.filter_sizes, self.strides, padding='same')(x)
-            x = keras.layers.BatchNormalization()(x)
-            x = keras.layers.Activation('relu')(x)
-            if i < len(self.filters) - 1:
-                x = keras.layers.Dropout(self.dropout_rate)(x)
-            else:
-                x = keras.layers.Dropout(self.dropout_rate, name='embedding')(x)
+        skip_layers = list()
+        for i, f in enumerate(self.filters[:-1]):
+            x = self._conv_block(x, f, name=f'skip_{f}')
+            skip_layers.append(x)
+            x = keras.layers.MaxPool2D((self.pool_size, self.pool_size))(x)
+            x = keras.layers.Dropout(self.dropout_rate)(x)
+        else:
+            x = self._conv_block(x, self.filters[-1], name='embedding')
 
         encoder_output = x
         self.encoder = keras.models.Model(
@@ -54,31 +56,53 @@ class HubmapMasker(keras.models.Model):
         )
 
         # set up decoder
-        for f in reversed(self.filters):
-            x = keras.layers.Conv2DTranspose(f, self.filter_sizes, self.strides, padding='same')(x)
-            x = keras.layers.BatchNormalization()(x)
-            x = keras.layers.Activation('relu')(x)
+        args = list(zip(self.filters[:-1], skip_layers))
+        for f, skip in reversed(args):
+            x = keras.layers.Conv2DTranspose(f, self.filter_sizes, self.pool_size, padding='same')(x)
+            x = keras.layers.Concatenate()([x, skip])
+            x = self._conv_block(x, f)
             x = keras.layers.Dropout(self.dropout_rate)(x)
 
-        x = keras.layers.Conv2DTranspose(1, self.filter_sizes, padding='same')(x)
+        autoencoder_output = x
+        autoencoder_output = self._conv_block(autoencoder_output, filters=3, name='decoder')
+        self.autoencoder = keras.models.Model(
+            inputs=input_layer,
+            outputs=autoencoder_output,
+            name='autoencoder',
+        )
+
+        x = keras.layers.Conv2D(1, self.filter_sizes, padding='same')(x)
+        x = keras.layers.BatchNormalization()(x)
         x = keras.layers.Lambda(lambda arg: tfa.image.gaussian_filter2d(
             image=arg,
-            filter_shape=7,
+            filter_shape=self.smoothing_size,
             padding='reflect',
         ), name='smoothing')(x)
-        decoder_output = keras.layers.Activation('sigmoid', name='masking')(x)
+        masker_output = keras.layers.Activation('sigmoid', name='masking')(x)
 
         self.masker = keras.models.Model(
             inputs=input_layer,
-            outputs=decoder_output,
+            outputs=masker_output,
             name='masker',
         )
 
         self.model = keras.models.Model(
             inputs=input_layer,
-            outputs=[encoder_output, decoder_output],
+            outputs=[encoder_output, autoencoder_output, masker_output],
             name='model',
         )
+
+    def _conv_block(self, x, filters, name: str = None):
+        x = keras.layers.Conv2D(filters, self.filter_sizes, padding='same')(x)
+        x = keras.layers.BatchNormalization()(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Conv2D(filters, self.filter_sizes, padding='same')(x)
+        x = keras.layers.BatchNormalization()(x)
+        if name is None:
+            x = keras.layers.Activation('relu')(x)
+        else:
+            x = keras.layers.Activation('relu', name=name)(x)
+        return x
 
     def call(self, inputs, training=None, mask=None):
         return self.masker(inputs)
@@ -97,6 +121,7 @@ class HubmapMasker(keras.models.Model):
         if loss is None:
             loss = {
                 'embedding': embedding_loss,
+                'autoencoder': 'mae',
                 'masking': 'mae',
             }
 
@@ -136,7 +161,8 @@ class HubmapMasker(keras.models.Model):
             'num_channels': self.num_channels,
             'filter_sizes': self.filter_sizes,
             'filters': self.filters,
-            'strides': self.strides,
+            'pool_size': self.pool_size,
+            'smoothing_size': self.smoothing_size,
             'dropout_rate': self.dropout_rate,
         }
 
@@ -160,13 +186,14 @@ class HubmapMasker(keras.models.Model):
 
 
 def test_model_and_save():
-    batch_size, tile_size = 128, 1024
+    batch_size, tile_size = 64, 1024
     image_shape = (batch_size, tile_size, tile_size, 3)
     images = tf.random.uniform(shape=image_shape)
     masks = tf.cast(tf.random.uniform(shape=tuple(image_shape[:-1])) > 0.5, dtype=tf.int32)
 
     ys = {
         'embedding': masks,
+        'autoencoder': images,
         'masking': masks,
     }
 
@@ -175,8 +202,9 @@ def test_model_and_save():
         image_size=image_shape[1],
         num_channels=image_shape[3],
         filter_sizes=3,
-        filters=[32 * (i + 1) for i in range(8)],
-        strides=2,
+        filters=[32, 64, 128, 256],
+        pool_size=2,
+        smoothing_size=5,
         dropout_rate=0.25,
     )
     model.summary()
