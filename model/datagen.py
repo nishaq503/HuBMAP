@@ -11,12 +11,8 @@ import pandas as pd
 import rasterio
 import tensorflow as tf
 from rasterio.windows import Window
-from tqdm import tqdm
 
 from model import utils
-
-# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-tf.get_logger().setLevel('DEBUG')
 
 
 def encoding_to_mask(encoding, shape):
@@ -208,7 +204,7 @@ def create_tf_records(
         shutil.rmtree(out_dir)
     os.makedirs(out_dir, exist_ok=True)
 
-    for i, tiff_path in tqdm(enumerate(filenames)):
+    for i, tiff_path in enumerate(filenames):
         encoding = encodings_list[i] if mode == 'train' else None
         tiff_name = tiff_path.split('/')[-1].split('.')[0]
         print(f'{i + 1:02d} Creating tfrecords for image: {tiff_name}')
