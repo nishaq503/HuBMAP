@@ -2,6 +2,7 @@ import os
 import shutil
 from glob import glob
 from typing import List
+from typing import Optional
 from typing import Tuple
 
 import cv2
@@ -134,8 +135,9 @@ def tiff_tile_generator(
         tile_size: int,
         min_overlap: int,
         s_threshold: int,  # saturation blanking threshold
-        p_threshold: int,  # threshold for minimum number of pixels
+        p_threshold: Optional[int],  # threshold for minimum number of pixels
 ):
+    p_threshold = 1000 * (tile_size // 256) ** 2 if p_threshold is None else p_threshold
     tiff_reader = rasterio.open(tiff_path, transform=rasterio.Affine(1, 0, 0, 0, 1, 0))
     if tiff_reader.count == 3:
         layers = None
@@ -221,7 +223,7 @@ def create_tf_records(
                     tile_size=tile_size,
                     min_overlap=min_overlap,
                     s_threshold=s_threshold,
-                    p_threshold=1000 * (tile_size // 256) ** 2 if p_threshold is None else p_threshold,
+                    p_threshold=p_threshold,
             ):
                 count += 1
                 if count % 100 == 0:  # I am impatient and require this for sanity
