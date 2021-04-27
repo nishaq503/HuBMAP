@@ -23,22 +23,16 @@ def encoding_to_mask(encoding, shape):
     splits = encoding.split()
     for i in range(0, len(splits), 2):
         start, length = int(splits[i]) - 1, int(splits[i + 1])
-        mask[start: start + length] = 1 + i
+        mask[start: start + length] = 1
     return mask.reshape(shape).T
 
 
-def mask_to_encoding(mask, n=1):
+def mask_to_encoding(mask):
     pixels = mask.T.flatten()
-    encoding = list()
-    for i in range(1, n + 1):
-        p = (pixels == i).astype(np.int8)
-        if p.sum() == 0:
-            encoding.append(np.nan)
-        else:
-            p = np.concatenate([[0], p, [0]])
-            runs = np.where(p[1:] != p[:-1])[0] + 1
-            encoding.append(' '.join(str(x) for x in runs))
-    return encoding
+    runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
+    starts = np.concatenate([[0], runs[1::2]])
+    lengths = runs[::2] - starts
+    return ' '.join((' '.join(map(str, v)) for v in zip(starts + 1, lengths)))
 
 
 def _bytes_feature(value):
@@ -248,9 +242,7 @@ def create_tf_records(
 
 
 if __name__ == '__main__':
-    _grid = _make_grid((20, 20), 6, 2)
-    print(_grid)
-    # create_tf_records('train')
+    create_tf_records('train')
     # create_tf_records('test')
     # _datagen = JSData(
     #     mode='train',
