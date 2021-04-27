@@ -53,6 +53,7 @@ def serialize_example(image, mask, indices):
     return example_proto.SerializeToString()
 
 
+@tf.function
 def parse_example(example_proto, tile_size: int):
     feature_description = {
         'indices': tf.io.FixedLenFeature([], tf.string),
@@ -62,7 +63,10 @@ def parse_example(example_proto, tile_size: int):
 
     single_example = tf.io.parse_single_example(example_proto, feature_description)
 
-    x1, x2, y1, y2 = single_example['indices']
+    indices = tf.reshape(
+        tf.io.decode_raw(single_example['indices'], out_type=np.dtype('int64')),
+        (4,),
+    )
 
     image = tf.reshape(
         tf.io.decode_raw(single_example['image'], out_type=np.dtype('uint8')),
@@ -73,11 +77,12 @@ def parse_example(example_proto, tile_size: int):
         tf.io.decode_raw(single_example['mask'], out_type=np.dtype('uint8')),
         (tile_size, tile_size),
     )
-    return image, mask, x1, x2, y1, y2
+    return image, mask, indices
 
 
-def load_dataset(filenames: List[str], tile_size: int):
-    dataset = tf.data.TFRecordDataset(filenames)
+@tf.function
+def load_tfrecords(filenames: List[str], tile_size: int):
+    dataset = tf.data.TFRecordDataset(filenames, compression_type='GZIP')
     dataset = dataset.map(
         lambda example: parse_example(example, tile_size),
         num_parallel_calls=tf.data.AUTOTUNE,
@@ -112,11 +117,7 @@ def _make_grid(shape: Tuple[int, int], tile_size: int, min_overlap: int):
     return grid.reshape(num_x * num_y, 4)
 
 
-def _filter_tissue(
-        image,
-        s_threshold: int,
-        p_threshold: int,
-) -> bool:
+def _filter_tissue(image, s_threshold: int, p_threshold: int) -> bool:
     saturation = cv2.split(cv2.cvtColor(image, cv2.COLOR_BGR2HSV))[1]
     not_all_black = ((saturation > s_threshold).sum() <= p_threshold)
     not_all_gray = (image.sum() <= p_threshold)  # is this redundant?
@@ -158,8 +159,6 @@ def tiff_tile_generator(
         if filter_tissue and _filter_tissue(image, s_threshold, p_threshold):
             continue
 
-        # TODO: figure out whether BGR is more efficient than RGB
-        # image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         if full_mask is None:
             mask = None
         else:
@@ -169,11 +168,7 @@ def tiff_tile_generator(
         yield image, mask, x1, x2, y1, y2
 
 
-def create_tf_records(
-        tile_size: int = 512,
-        min_overlap: int = 128,
-        filter_tissue: bool = True,
-):
+def create_tf_records(tile_size: int = 512, min_overlap: int = 128, filter_tissue: bool = True):
     # get the names of the tiff files to be read and
     # the list of encodings of the corresponding masks
     masks_df = pd.read_csv(utils.TRAIN_PATH)
@@ -188,7 +183,7 @@ def create_tf_records(
     for i, tiff_path in enumerate(filenames):
         encoding = encodings_list[i]
         tiff_name = tiff_path.split('/')[-1].split('.')[0]
-        print(f'{i + 1:02d} Creating tfrecords for image: {tiff_name}')
+        print(f'{i + 1:2d} Creating tfrecords for image: {tiff_name}')
 
         count, glom_count = 0, 0  # to rename tfrec files later
 
@@ -211,9 +206,9 @@ def create_tf_records(
                 ):
                     count += 1
                     if count % 100 == 0:  # I am impatient and require this for my sanity
-                        print(f'{count}', end=' ' if count % 1000 != 0 else '\n')
+                        print(f'{count:4d}', end=' ' if count % 1000 != 0 else '\n')
 
-                    indices = np.asarray((x1, x2, y1, y2), dtype=np.uint64)
+                    indices = np.asarray((x1, x2, y1, y2), dtype=np.int64)
                     # serialize and write to tfrec
                     if mask.sum() > 0:
                         glom_count += 1
@@ -228,14 +223,23 @@ def create_tf_records(
                             mask=mask.tobytes(),
                             indices=indices.tobytes(),
                         ))
-            print(count)
+            print(f'{count:4d}')
 
         new_tfrec_path = os.path.join(utils.TF_TRAIN_DIR, f'{tfrec_name}-{count - glom_count}.tfrec')
         os.rename(tfrec_path, new_tfrec_path)
 
         new_tfrec_glom_path = os.path.join(utils.TF_TRAIN_DIR, f'{tfrec_glom_name}-{glom_count}.tfrec')
         os.rename(tfrec_glom_path, new_tfrec_glom_path)
+        break
     return
+
+
+# WARNINGS:
+# TIFFReadDirectoryCheckOrder:Invalid TIFF directory; tags are not sorted in ascending order
+# e79de561c 54f2eec69
+#
+# Nonstandard tile length/width ###, convert file
+# 095bf7a1f 4ef6695ce 26dc41664 c68fe75ea 1e2425f28
 
 
 if __name__ == '__main__':
