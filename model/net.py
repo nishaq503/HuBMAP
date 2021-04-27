@@ -186,7 +186,7 @@ class HubmapMasker(keras.models.Model):
 
 
 def test_model_and_save():
-    batch_size, tile_size = 64, 1024
+    batch_size, tile_size = 64, 512
     image_shape = (batch_size, tile_size, tile_size, 3)
     images = tf.random.uniform(shape=image_shape)
     masks = tf.cast(tf.random.uniform(shape=tuple(image_shape[:-1])) > 0.5, dtype=tf.int32)
@@ -202,7 +202,7 @@ def test_model_and_save():
         image_size=image_shape[1],
         num_channels=image_shape[3],
         filter_sizes=3,
-        filters=[32, 64, 128, 256],
+        filters=[32 * (i + 1) for i in range(5)],
         pool_size=2,
         smoothing_size=5,
         dropout_rate=0.25,
