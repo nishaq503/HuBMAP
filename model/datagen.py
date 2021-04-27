@@ -1,8 +1,6 @@
 import os
 import shutil
-from glob import glob
 from typing import List
-from typing import Optional
 from typing import Tuple
 
 import cv2
@@ -15,7 +13,7 @@ from rasterio.windows import Window
 from model import utils
 
 
-def encoding_to_mask(encoding, shape):
+def encoding_to_mask(encoding: str, shape: Tuple[int, int]) -> np.array:
     mask = np.zeros(np.prod(shape), dtype=np.uint8)
     splits = encoding.split()
     for i in range(0, len(splits), 2):
@@ -24,7 +22,7 @@ def encoding_to_mask(encoding, shape):
     return mask.reshape(shape).T
 
 
-def mask_to_encoding(mask):
+def mask_to_encoding(mask: np.array) -> str:
     pixels = mask.T.flatten()
     runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
     starts = np.concatenate([[0], runs[1::2]])
@@ -41,61 +39,50 @@ def _bytes_feature(value):
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
 
-def _int64_feature(value):
-    """ Returns an int64_list from a bool / enum / int / uint.
-    """
-    return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
-
-
-def serialize_example(image, mask, x_index: int, y_index: int):
+def serialize_example(image, mask, indices):
     """ Creates a tf.train.Example message ready to be written to a file.
     """
     # Create a dictionary mapping the feature name to the tf.train.Example-compatible data type.
     feature = {
-        'x_index': _int64_feature(x_index),
-        'y_index': _int64_feature(y_index),
+        'indices': _bytes_feature(indices),
         'image': _bytes_feature(image),
+        'mask': _bytes_feature(mask),
     }
-    if mask is not None:
-        feature['mask'] = _bytes_feature(mask)
     # Create a Features message using tf.train.Example.
     example_proto = tf.train.Example(features=tf.train.Features(feature=feature))
     return example_proto.SerializeToString()
 
 
-def parse_example(example_proto, tile_size: int, mode: str):
+def parse_example(example_proto, tile_size: int):
     feature_description = {
-        'x_index': tf.io.FixedLenFeature([], tf.int64),
-        'y_index': tf.io.FixedLenFeature([], tf.int64),
+        'indices': tf.io.FixedLenFeature([], tf.string),
         'image': tf.io.FixedLenFeature([], tf.string),
+        'mask': tf.io.FixedLenFeature([], tf.string),
     }
-    if mode == 'train':
-        feature_description['mask'] = tf.io.FixedLenFeature([], tf.string)
 
     single_example = tf.io.parse_single_example(example_proto, feature_description)
-    x_index = single_example['x_index']
-    y_index = single_example['y_index']
+
+    x1, x2, y1, y2 = single_example['indices']
+
     image = tf.reshape(
         tf.io.decode_raw(single_example['image'], out_type=np.dtype('uint8')),
-        (tile_size, tile_size),
+        (tile_size, tile_size, 3),
     )
 
-    if mode == 'train':
-        mask = tf.reshape(
-            tf.io.decode_raw(single_example['mask'], out_type=np.dtype('uint8')),
-            (tile_size, tile_size),
-        )
-        return image, mask, x_index, y_index
-    else:
-        return image, x_index, y_index
+    mask = tf.reshape(
+        tf.io.decode_raw(single_example['mask'], out_type=np.dtype('uint8')),
+        (tile_size, tile_size),
+    )
+    return image, mask, x1, x2, y1, y2
 
 
-def load_dataset(filenames: List[str], tile_size: int, mode: str):
-    if mode not in {'train', 'test'}:
-        raise ValueError(f'mode must be \'train\' or \'test\'. Got \'{mode}\' instead.')
-
+def load_dataset(filenames: List[str], tile_size: int):
     dataset = tf.data.TFRecordDataset(filenames)
-    dataset = dataset.map(lambda example: parse_example(example, tile_size, mode))
+    dataset = dataset.map(
+        lambda example: parse_example(example, tile_size),
+        num_parallel_calls=tf.data.AUTOTUNE,
+        deterministic=False,
+    )
     return dataset
 
 
@@ -125,26 +112,37 @@ def _make_grid(shape: Tuple[int, int], tile_size: int, min_overlap: int):
     return grid.reshape(num_x * num_y, 4)
 
 
+def _filter_tissue(
+        image,
+        s_threshold: int,
+        p_threshold: int,
+) -> bool:
+    saturation = cv2.split(cv2.cvtColor(image, cv2.COLOR_BGR2HSV))[1]
+    not_all_black = ((saturation > s_threshold).sum() <= p_threshold)
+    not_all_gray = (image.sum() <= p_threshold)  # is this redundant?
+    return not_all_black or not_all_gray
+
+
 def tiff_tile_generator(
         tiff_path: str,
         encoding: str,
         tile_size: int,
         min_overlap: int,
-        s_threshold: int,  # saturation blanking threshold
-        p_threshold: Optional[int],  # threshold for minimum number of pixels
+        filter_tissue: bool = True,
 ):
-    p_threshold = 1000 * (tile_size // 256) ** 2 if p_threshold is None else p_threshold
+    s_threshold = 40  # saturation blanking threshold
+    p_threshold = 1000 * (tile_size // 256) ** 2  # threshold for minimum number of pixels
+
     tiff_reader = rasterio.open(tiff_path, transform=rasterio.Affine(1, 0, 0, 0, 1, 0))
     if tiff_reader.count == 3:
         layers = None
     else:
         layers = [rasterio.open(sub_dataset) for sub_dataset in tiff_reader.subdatasets]
 
-    if encoding is None:
-        full_mask = None
-    else:
-        full_mask = encoding_to_mask(encoding, (tiff_reader.shape[1], tiff_reader.shape[0]))
-
+    full_mask = None if encoding is None else encoding_to_mask(
+        encoding=encoding,
+        shape=(tiff_reader.shape[1], tiff_reader.shape[0]),
+    )
     slices = _make_grid(tiff_reader.shape, tile_size, min_overlap)
     print(f'num_slices: {slices.shape[0]}')
 
@@ -157,91 +155,91 @@ def tiff_tile_generator(
             for channel in range(3):
                 image[:, :, channel] = layers[channel].read(window=window)
 
-        # if the image does not contain tissue, continue
-        # TODO: Visualize and check
-        saturation = cv2.split(cv2.cvtColor(image, cv2.COLOR_BGR2HSV))[1]
-        if ((saturation > s_threshold).sum() <= p_threshold) or (image.sum() <= p_threshold):
+        if filter_tissue and _filter_tissue(image, s_threshold, p_threshold):
             continue
 
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        # TODO: figure out whether BGR is more efficient than RGB
+        # image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         if full_mask is None:
             mask = None
         else:
             mask = np.zeros((tile_size, tile_size), dtype=np.uint8)
             mask[:, :] = full_mask[x1:x2, y1:y2]
 
-        yield image, mask, x1, y1, x2, y2
+        yield image, mask, x1, x2, y1, y2
 
 
 def create_tf_records(
-        mode: str,  # train or test
-        tile_size: int = 1024,
-        min_overlap: int = 32,
-        s_threshold: int = 40,  # saturation blanking threshold
-        p_threshold: int = None,  # threshold for minimum number of pixels
+        tile_size: int = 512,
+        min_overlap: int = 128,
+        filter_tissue: bool = True,
 ):
     # get the names of the tiff files to be read and
-    # (optionally) the list of encodings of the corresponding masks
-    if mode == 'train':
-        in_dir = utils.TRAIN_DIR
-        out_dir = utils.TF_TRAIN_DIR
-
-        masks_df = pd.read_csv(utils.TRAIN_PATH)
-        filenames = [os.path.join(in_dir, f'{name}.tiff') for name in masks_df['id']]
-        encodings_list = list(masks_df['encoding'])
-    elif mode == 'test':
-        in_dir = utils.TEST_DIR
-        out_dir = utils.TF_TEST_DIR
-
-        path_pattern = f'{in_dir}/*.tiff'
-        filenames = list(glob(path_pattern))
-        encodings_list = None
-    else:
-        raise ValueError(f'mode must be \'train\' or \'test\'. Got \'{mode}\' instead.')
+    # the list of encodings of the corresponding masks
+    masks_df = pd.read_csv(utils.TRAIN_PATH)
+    filenames = [os.path.join(utils.TRAIN_DIR, f'{name}.tiff') for name in masks_df['id']]
+    encodings_list = list(masks_df['encoding'])
 
     # clean out the old files and prepare to write anew.
-    if os.path.exists(out_dir):
-        shutil.rmtree(out_dir)
-    os.makedirs(out_dir, exist_ok=True)
+    if os.path.exists(utils.TF_TRAIN_DIR):
+        shutil.rmtree(utils.TF_TRAIN_DIR)
+    os.makedirs(utils.TF_TRAIN_DIR, exist_ok=True)
 
     for i, tiff_path in enumerate(filenames):
-        encoding = encodings_list[i] if mode == 'train' else None
+        encoding = encodings_list[i]
         tiff_name = tiff_path.split('/')[-1].split('.')[0]
         print(f'{i + 1:02d} Creating tfrecords for image: {tiff_name}')
 
-        count = 0  # to rename tfrec later
-        tfrec_path = os.path.join(out_dir, f'{tiff_name}.tfrec')
+        count, glom_count = 0, 0  # to rename tfrec files later
+
+        tfrec_name = f'{tiff_name}'
+        tfrec_path = os.path.join(utils.TF_TRAIN_DIR, f'{tfrec_name}.tfrec')
+
+        tfrec_glom_name = f'{tiff_name}-glom'
+        tfrec_glom_path = os.path.join(utils.TF_TRAIN_DIR, f'{tfrec_glom_name}.tfrec')
+
         options = tf.io.TFRecordOptions('GZIP')  # compression slows down writing but uses only ~35% space
-        with tf.io.TFRecordWriter(tfrec_path, options=options) as tf_writer:
-            for image, mask, x1, y1, _, _ in tiff_tile_generator(
+        with tf.io.TFRecordWriter(tfrec_glom_path, options=options) as glom_tf_writer:
+            with tf.io.TFRecordWriter(tfrec_path, options=options) as tf_writer:
+
+                for image, mask, x1, x2, y1, y2 in tiff_tile_generator(
                     tiff_path=tiff_path,
                     encoding=encoding,
                     tile_size=tile_size,
                     min_overlap=min_overlap,
-                    s_threshold=s_threshold,
-                    p_threshold=p_threshold,
-            ):
-                count += 1
-                if count % 100 == 0:  # I am impatient and require this for sanity
-                    print(f'{count}', end=' ')
+                    filter_tissue=filter_tissue,
+                ):
+                    count += 1
+                    if count % 100 == 0:  # I am impatient and require this for my sanity
+                        print(f'{count}', end=' ' if count % 1000 != 0 else '\n')
 
-                # serialize and write to tfrec
-                tf_writer.write(serialize_example(
-                    image=image.tobytes(),
-                    mask=None if mask is None else mask.tobytes(),
-                    x_index=x1,
-                    y_index=y1,
-                ))
-            print()
+                    indices = np.asarray((x1, x2, y1, y2), dtype=np.uint64)
+                    # serialize and write to tfrec
+                    if mask.sum() > 0:
+                        glom_count += 1
+                        glom_tf_writer.write(serialize_example(
+                            image=image.tobytes(),
+                            mask=mask.tobytes(),
+                            indices=indices.tobytes(),
+                        ))
+                    else:
+                        tf_writer.write(serialize_example(
+                            image=image.tobytes(),
+                            mask=mask.tobytes(),
+                            indices=indices.tobytes(),
+                        ))
+            print(count)
 
-        new_tfrec_path = os.path.join(out_dir, f'{tiff_name}-{count}.tfrec')
+        new_tfrec_path = os.path.join(utils.TF_TRAIN_DIR, f'{tfrec_name}-{count - glom_count}.tfrec')
         os.rename(tfrec_path, new_tfrec_path)
+
+        new_tfrec_glom_path = os.path.join(utils.TF_TRAIN_DIR, f'{tfrec_glom_name}-{glom_count}.tfrec')
+        os.rename(tfrec_glom_path, new_tfrec_glom_path)
     return
 
 
 if __name__ == '__main__':
-    create_tf_records('train')
-    # create_tf_records('test')
+    create_tf_records()
     # _datagen = JSData(
     #     mode='train',
     #     resp=0,
