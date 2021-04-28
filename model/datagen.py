@@ -230,11 +230,13 @@ def create_tf_records(tile_size: int = 512, min_overlap: int = 128, filter_tissu
 
         new_tfrec_glom_path = os.path.join(utils.TF_TRAIN_DIR, f'{tfrec_glom_name}-{glom_count}.tfrec')
         os.rename(tfrec_glom_path, new_tfrec_glom_path)
-        break
     return
 
 
 # WARNINGS:
+# NotGeoreferencedWarning: Dataset has no geotransform, gcps, or rpcs. The identity matrix be returned.
+# 2f6ecfcdf
+#
 # TIFFReadDirectoryCheckOrder:Invalid TIFF directory; tags are not sorted in ascending order
 # e79de561c 54f2eec69
 #
