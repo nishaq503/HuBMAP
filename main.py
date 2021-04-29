@@ -37,9 +37,9 @@ def resume_training(initial_epoch: int, final_epoch: int):
     model = HubmapMasker.load('main_model')
 
     weights = {
-        'embedding': 1,
-        'autoencoder': 1,
-        'mask': 2,
+        'embedding': 5,
+        'autoencoder': 2,
+        'mask': 1,
     }
     model.compile(weights=weights)
 

@@ -16,7 +16,7 @@ SAMPLE_SUBMISSION_PATH = os.path.join(DATA_DIR, 'sample_submission.csv')
 
 GLOBALS = {
     'tile_size': 256,
-    'batch_size': 32,
+    'batch_size': 8,
     's_threshold': 40,
 }
 GLOBALS['min_overlap'] = GLOBALS['tile_size'] // 8
