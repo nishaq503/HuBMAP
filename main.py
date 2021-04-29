@@ -39,12 +39,12 @@ def train_model(epochs: int):
 def resume_training(initial_epoch: int, final_epoch: int):
     model = HubmapMasker.load('main_model')
 
-    weights = {
-        'embedding': 1,
-        'autoencoder': 1,
-        'mask': 2,
-    }
-    model.compile(weights=weights)
+    # weights = {
+    #     'embedding': 1,
+    #     'autoencoder': 1,
+    #     'mask': 2,
+    # }
+    model.compile()
 
     train_gen = TrainSequence('train')
     valid_gen = TrainSequence('validate')
