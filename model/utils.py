@@ -23,9 +23,27 @@ GLOBALS['min_overlap'] = GLOBALS['tile_size'] // 8
 GLOBALS['p_threshold'] = 1000 * (GLOBALS['tile_size'] // 256) ** 2
 
 
-if __name__ == '__main__':
+def verify_initial_data_presence():
     for _path in [TRAIN_PATH, SAMPLE_SUBMISSION_PATH]:
         assert os.path.exists(_path)
+    return
 
+
+def create_local_dirs():
     for _dir in [LOGS_DIR, MODELS_DIR, RESULTS_DIR]:
         os.makedirs(_dir, exist_ok=True)
+    return
+
+
+def delete_old():
+    import shutil
+
+    for _dir in [LOGS_DIR, MODELS_DIR]:
+        shutil.rmtree(_dir)
+        os.makedirs(_dir, exist_ok=True)
+    return
+
+
+if __name__ == '__main__':
+    verify_initial_data_presence()
+    create_local_dirs()

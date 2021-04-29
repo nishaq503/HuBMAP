@@ -65,7 +65,7 @@ def embedding_loss(
     embeddings_distances /= tf.cast(tf.shape(embeddings)[1], tf.float32)
 
     loss = tf.losses.mean_absolute_error(masks_distances, embeddings_distances)
-    return loss * tf.cast((1 / 0.2), tf.float32)
+    return loss
 
 
 def dice_coef(true_masks, pred_masks, smooth: float = 1):
@@ -73,17 +73,18 @@ def dice_coef(true_masks, pred_masks, smooth: float = 1):
 
     intersection = keras.backend.sum(true_masks * pred_masks, axis=[1, 2])
     union = keras.backend.sum(true_masks, axis=[1, 2]) + keras.backend.sum(pred_masks, axis=[1, 2])
-    return keras.backend.mean((2. * intersection + smooth) / (union + smooth), axis=0)
+    dice = keras.backend.mean((2. * intersection + smooth) / (union + smooth), axis=0)
+    return dice
 
 
 def dice_loss(true_masks, pred_masks, smooth: float = 1):
     loss = 1. - dice_coef(true_masks, pred_masks, smooth)
-    return loss * tf.cast((1 / 0.8), tf.float32)
+    return loss
 
 
 def ae_loss(true_images, pred_images):
     loss = tf.losses.mean_absolute_error(true_images, pred_images)
-    return loss * tf.cast((1 / 160), tf.float32)
+    return loss
 
 
 # noinspection DuplicatedCode

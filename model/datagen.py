@@ -316,8 +316,9 @@ class TrainSequence:
             images1, masks1, _ = val1
             images2, masks2, _ = val2
 
-            images = tf.concat([images1, images2], axis=0)
             masks = tf.concat([masks1, masks2], axis=0)
+            images = tf.concat([images1, images2], axis=0)
+            images = tf.cast(images, tf.float32) / tf.cast(255, tf.float32)
 
             ys = {
                 'embedding': masks,
