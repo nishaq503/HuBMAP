@@ -203,7 +203,7 @@ def create_tf_records(tile_size: int = None, min_overlap: int = None, filter_tis
         tfrec_glom_name = f'{tiff_name}-glom'
         tfrec_glom_path = os.path.join(utils.TF_TRAIN_DIR, f'{tfrec_glom_name}.tfrec')
 
-        # options = tf.io.TFRecordOptions('GZIP')  # compression slows down writing but uses only ~35% space
+        # options = tf.io.TFRecordOptions('GZIP')  # compression slows down writing but uses only ~60% space
         options = None
         with tf.io.TFRecordWriter(tfrec_glom_path, options=options) as glom_tf_writer:
             with tf.io.TFRecordWriter(tfrec_path, options=options) as tf_writer:
@@ -241,6 +241,29 @@ def create_tf_records(tile_size: int = None, min_overlap: int = None, filter_tis
 
         new_tfrec_glom_path = os.path.join(utils.TF_TRAIN_DIR, f'{tfrec_glom_name}-{glom_count}.tfrec')
         os.rename(tfrec_glom_path, new_tfrec_glom_path)
+    return
+
+
+def create_tf_df():
+    sizes_path = os.path.join(utils.DATA_DIR, 'sizes.tsv')
+    os.system(f'du -hs {utils.TF_TRAIN_DIR}/* > {sizes_path}')
+    sizes_df = pd.read_csv(sizes_path, sep='\t', names=['size', 'id'], header=None)
+    os.system(f'rm {sizes_path}')
+
+    sizes_df['id'] = sizes_df['id'].apply(lambda s: s.split('.')[0])
+    sizes_df['size'] = sizes_df['size'].apply(lambda s: int((1000 if s[-1] == 'G' else 1) * float(s[:-1])))
+    sizes_df['glom'] = sizes_df['id'].apply(lambda s: int('glom' in s))
+    sizes_df['num_records'] = sizes_df['id'].apply(lambda s: int(s.split('-')[-1]))
+    sizes_df['id'] = sizes_df['id'].apply(lambda s: s.split('-')[0].split('/')[-1])
+    sizes_df['num_glom_records'] = sizes_df['num_records'] * sizes_df['glom']
+    sizes_df['num_records'] = sizes_df['num_records'] * (1 - sizes_df['glom'])
+    sizes_df.drop(['glom'], axis='columns', inplace=True)
+    sizes_df = sizes_df.groupby('id').sum()
+
+    train_df = pd.concat([pd.read_csv(utils.TRAIN_PATH).set_index('id'), sizes_df], axis=1)
+    train_df = train_df[['size', 'num_records', 'num_glom_records', 'encoding']]
+    train_df.sort_values(by='size')
+    train_df.to_csv(utils.TF_TRAIN_PATH)
     return
 
 
@@ -318,5 +341,6 @@ class TrainSequence:
 
 if __name__ == '__main__':
     # create_tf_records()
+    # create_tf_df()
     print(len(TrainSequence(mode='train')))
     print(len(TrainSequence(mode='validate')))
