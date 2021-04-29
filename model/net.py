@@ -7,10 +7,7 @@ import tensorflow_addons as tfa
 from tensorflow import keras
 
 from model import utils
-from model.loss_functions import ae_loss
-from model.loss_functions import dice_coef
-from model.loss_functions import dice_loss
-from model.loss_functions import embedding_loss
+from model import loss_functions
 
 
 class HubmapMasker(keras.models.Model):
@@ -123,13 +120,13 @@ class HubmapMasker(keras.models.Model):
     ):
         if loss is None:
             loss = {
-                'embedding': embedding_loss,
-                'autoencoder': ae_loss,
-                'mask': dice_loss,
+                'embedding': loss_functions.embedding_loss,
+                'autoencoder': loss_functions.ae_loss,
+                'mask': loss_functions.dice_loss,
             }
 
         if metrics is None:
-            metrics = {'mask': dice_coef}
+            metrics = {'mask': loss_functions.dice_coef}
 
         return self.model.compile(
             optimizer=optimizer,
@@ -200,7 +197,7 @@ def test_model_and_save():
         image_size=image_shape[1],
         num_channels=image_shape[3],
         filter_sizes=3,
-        filters=[16 * (i + 1) for i in range(4)],
+        filters=[32 * (1 + i) for i in range(4)],
         pool_size=2,
         smoothing_size=5,
         dropout_rate=0.25,
@@ -231,12 +228,7 @@ def test_load_model():
 
 
 if __name__ == '__main__':
-    # import shutil
-    #
-    # for _dir in [utils.LOGS_DIR, utils.MODELS_DIR]:
-    #     shutil.rmtree(_dir)
-    #     os.makedirs(_dir, exist_ok=True)
-
-    # test_model_and_save()
-    print(test_load_model().shape)
+    utils.delete_old()
+    test_model_and_save()
+    # print(test_load_model().shape)
     pass

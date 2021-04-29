@@ -6,11 +6,11 @@ from model import utils
 
 def train_model(epochs: int):
     model = HubmapMasker(
-        model_name='main_model',
+        model_name='mask_model',
         image_size=utils.GLOBALS['tile_size'],
         num_channels=3,
         filter_sizes=3,
-        filters=[16 * (i + 1) for i in range(4)],
+        filters=[32 * (1 + i) for i in range(4)],
         pool_size=2,
         smoothing_size=5,
         dropout_rate=0.25,
@@ -36,12 +36,12 @@ def train_model(epochs: int):
 def resume_training(initial_epoch: int, final_epoch: int):
     model = HubmapMasker.load('main_model')
 
-    # weights = {
-    #     'embedding': 1,
-    #     'autoencoder': 1,
-    #     'mask': 2,
-    # }
-    model.compile()
+    weights = {
+        'embedding': 1,
+        'autoencoder': 1,
+        'mask': 2,
+    }
+    model.compile(weights=weights)
 
     train_gen = TrainSequence('train')
     valid_gen = TrainSequence('validate')
@@ -59,4 +59,5 @@ def resume_training(initial_epoch: int, final_epoch: int):
 
 
 if __name__ == '__main__':
+    # utils.delete_old()
     train_model(1)
