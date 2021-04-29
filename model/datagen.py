@@ -81,7 +81,7 @@ def parse_example(example_proto, tile_size: int):
 
 
 @tf.function
-def load_tfrecords(filenames: List[str], tile_size: int):
+def load_tfrecords(filenames: List[str], tile_size: int) -> tf.data.TFRecordDataset:
     dataset = tf.data.TFRecordDataset(filenames, compression_type='GZIP')
     dataset = dataset.map(
         lambda example: parse_example(example, tile_size),
@@ -233,6 +233,117 @@ def create_tf_records(tile_size: int = 512, min_overlap: int = 128, filter_tissu
     return
 
 
+# def batch_generator(mode: str, tile_size: int = 512, batch_size: int = 32):
+#     if batch_size % 2 != 0:
+#         raise ValueError(f'Batch size must be a positive even integer. Got {batch_size} instead.')
+#
+#     train_df = pd.read_csv(utils.TRAIN_PATH).set_index('id')
+#
+#     if mode == 'train':
+#         file_ids = train_df.index[:10]
+#     elif mode == 'validate':
+#         file_ids = train_df.index[10:12]
+#     else:
+#         raise ValueError(f'mode must be one of \'train\' or \'validate\'. Got {mode} instead.')
+#
+#     file_ids: List[str] = list(file_ids)
+#     df: pd.DataFrame = train_df.loc[file_ids]
+#
+#     file_names = df.index + '-' + df['num_records'].apply(str) + '.tfrec'
+#     file_paths = [os.path.join(utils.TF_TRAIN_DIR, name) for name in file_names]
+#     assert all(map(os.path.exists, file_paths))
+#
+#     file_names = df.index + '-glom-' + df['num_glom_records'].apply(str) + '.tfrec'
+#     glom_paths = [os.path.join(utils.TF_TRAIN_DIR, name) for name in file_names]
+#     assert all(map(os.path.exists, glom_paths))
+#
+#     num_glom_tiles = df['num_glom_records'].sum()
+#     num_batches = num_glom_tiles // (batch_size // 2)
+#     if num_glom_tiles % (batch_size // 2) != 0:
+#         num_batches += 1
+#
+#     tiles_tfrec = load_tfrecords(file_paths, tile_size=tile_size)
+#     tiles_tfrec: tf.data.TFRecordDataset = tiles_tfrec.repeat().batch(batch_size // 2)
+#
+#     gloms_tfrec = load_tfrecords(glom_paths, tile_size=tile_size)
+#     gloms_tfrec: tf.data.TFRecordDataset = gloms_tfrec.repeat().batch(batch_size // 2)
+#
+#     for val1, val2 in zip(tiles_tfrec, gloms_tfrec):
+#         images1, masks1, _ = val1
+#         images2, masks2, _ = val2
+#
+#         images = tf.concat([images1, images2], axis=0)
+#         masks = tf.concat([masks1, masks2], axis=0)
+#
+#         ys = {
+#             'embedding': masks,
+#             'autoencoder': images,
+#             'masking': masks,
+#         }
+#
+#         yield images, ys
+
+
+class TrainSequence:
+    def __init__(self, mode: str, tile_size: int = 512, batch_size: int = 16):
+        if batch_size % 2 == 0:
+            self.batch_size: int = batch_size
+        else:
+            raise ValueError(f'Batch size must be a positive even integer. Got {batch_size} instead.')
+
+        self.tile_size: int = tile_size
+
+        train_df = pd.read_csv(utils.TRAIN_PATH).set_index('id')
+
+        if mode == 'train':
+            file_ids = train_df.index[:10]
+        elif mode == 'validate':
+            file_ids = train_df.index[10:12]
+        else:
+            raise ValueError(f'mode must be one of \'train\' or \'validate\'. Got {mode} instead.')
+
+        self.file_ids: List[str] = list(file_ids)
+        self.df: pd.DataFrame = train_df.loc[self.file_ids]
+
+        file_names = self.df.index + '-' + self.df['num_records'].apply(str) + '.tfrec'
+        self.file_paths = [os.path.join(utils.TF_TRAIN_DIR, name) for name in file_names]
+        assert all(map(os.path.exists, self.file_paths))
+
+        file_names = self.df.index + '-glom-' + self.df['num_glom_records'].apply(str) + '.tfrec'
+        self.glom_paths = [os.path.join(utils.TF_TRAIN_DIR, name) for name in file_names]
+        assert all(map(os.path.exists, self.glom_paths))
+
+        self.num_glom_tiles = self.df['num_glom_records'].sum()
+        self.num_batches = self.num_glom_tiles // (self.batch_size // 2)
+        if self.num_glom_tiles % (self.batch_size // 2) != 0:
+            self.num_batches += 1
+
+        self.tiles_tfrec = load_tfrecords(self.file_paths, tile_size=self.tile_size)
+        self.tiles_tfrec: tf.data.TFRecordDataset = self.tiles_tfrec.repeat().batch(self.batch_size // 2)
+
+        self.gloms_tfrec = load_tfrecords(self.glom_paths, tile_size=self.tile_size)
+        self.gloms_tfrec: tf.data.TFRecordDataset = self.gloms_tfrec.repeat().batch(self.batch_size // 2)
+
+    def __len__(self):
+        return self.num_batches
+
+    def __iter__(self):
+        for val1, val2 in zip(self.tiles_tfrec, self.gloms_tfrec):
+            images1, masks1, _ = val1
+            images2, masks2, _ = val2
+
+            images = tf.concat([images1, images2], axis=0)
+            masks = tf.concat([masks1, masks2], axis=0)
+
+            ys = {
+                'embedding': masks,
+                'autoencoder': images,
+                'masking': masks,
+            }
+
+            yield images, ys
+
+
 # WARNINGS:
 # NotGeoreferencedWarning: Dataset has no geotransform, gcps, or rpcs. The identity matrix be returned.
 # 2f6ecfcdf
@@ -245,13 +356,7 @@ def create_tf_records(tile_size: int = 512, min_overlap: int = 128, filter_tissu
 
 
 if __name__ == '__main__':
-    create_tf_records()
-    # _datagen = JSData(
-    #     mode='train',
-    #     resp=0,
-    #     batch_size=32,
-    #     noisy=True
-    # )
-    # for _i in range(5):
-    #     _v1, _v2 = _datagen[_i]
-    #     print(dict(Counter(_v2['classifier'])))
+    print(len(TrainSequence(mode='train')))
+    print(len(TrainSequence(mode='validate')))
+
+    # create_tf_records()

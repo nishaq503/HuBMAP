@@ -1,3 +1,4 @@
+import keras.backend
 import numpy as np
 import tensorflow as tf
 
@@ -34,11 +35,11 @@ def _pairwise_distances_embeddings(embeddings: tf.Tensor):
 def _pairwise_distances_masks(masks: tf.Tensor):
     """ Pairwise distances between square masks.
 
-    :param masks: tf.int32 tensor with shape (batch_size, image_height, image_width)
-    :return: tf.int32 tensor with shape (batch_size, batch_size) of pairwise distances between masks.
+    :param masks: tf.uint8 tensor with shape (batch_size, image_height, image_width)
+    :return: tf.float32 tensor with shape (batch_size, batch_size) of pairwise distances between masks.
     """
-    x = tf.expand_dims(masks, 0)
-    y = tf.expand_dims(masks, 1)
+    x = tf.cast(tf.expand_dims(masks, 0), tf.float32)
+    y = tf.cast(tf.expand_dims(masks, 1), tf.float32)
     return tf.reduce_sum(tf.abs(x - y), axis=[-2, -1])
 
 
@@ -52,7 +53,7 @@ def embedding_loss(
     Make it so that the distances between embeddings are proportional to the distances between masks.
     This loss is normalized by the dimensionality of the embedding and the mask.
 
-    :param masks: tf.int32 rank-3 tensor with shape (batch_size, image_height, image_width)
+    :param masks: tf.uint8 rank-3 tensor with shape (batch_size, image_height, image_width)
                         or rank-4 tensor with shape (batch_size, image_height, image_width, 1)
     :param embeddings: tf.float32 tensor with shape (batch_size, embedding_height, embedding_width, num_filters)
     :return: tf.float32 scalar Mean Absolute/Squared Error between embedding distances and mask distances.
@@ -67,6 +68,18 @@ def embedding_loss(
     embeddings_distances /= tf.cast(tf.shape(embeddings)[1], tf.float32)
 
     return tf.losses.mean_absolute_error(masks_distances, embeddings_distances)
+
+
+def dice_coef(true_masks, pred_masks, smooth: float = 1):
+    true_masks = keras.backend.cast(true_masks, dtype=tf.float32)
+
+    intersection = keras.backend.sum(true_masks * pred_masks, axis=[1, 2])
+    union = keras.backend.sum(true_masks, axis=[1, 2]) + keras.backend.sum(pred_masks, axis=[1, 2])
+    return keras.backend.mean((2. * intersection + smooth) / (union + smooth), axis=0)
+
+
+def dice_loss(true_masks, pred_masks, smooth: float = 1):
+    return 1. - dice_coef(true_masks, pred_masks, smooth)
 
 
 # noinspection DuplicatedCode

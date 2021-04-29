@@ -6,6 +6,8 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 from tensorflow import keras
 
+from loss_functions import dice_coef
+from loss_functions import dice_loss
 from loss_functions import embedding_loss
 from model import utils
 
@@ -64,7 +66,7 @@ class HubmapMasker(keras.models.Model):
             x = keras.layers.Dropout(self.dropout_rate)(x)
 
         autoencoder_output = x
-        autoencoder_output = self._conv_block(autoencoder_output, filters=3, name='decoder')
+        autoencoder_output = self._conv_block(autoencoder_output, filters=3, name='autoencoder')
         self.autoencoder = keras.models.Model(
             inputs=input_layer,
             outputs=autoencoder_output,
@@ -122,8 +124,11 @@ class HubmapMasker(keras.models.Model):
             loss = {
                 'embedding': embedding_loss,
                 'autoencoder': 'mae',
-                'masking': 'mae',
+                'masking': dice_loss,
             }
+
+        if metrics is None:
+            metrics = {'masking': dice_coef}
 
         return self.model.compile(
             optimizer=optimizer,
@@ -133,26 +138,16 @@ class HubmapMasker(keras.models.Model):
         )
 
     def fit(self, **kwargs):
-        if kwargs['callbacks'] is None:
-            kwargs['callbacks'] = [
-                keras.callbacks.TensorBoard(
-                    log_dir=os.path.join(utils.LOGS_DIR, self.model_name),
-                ),
-                keras.callbacks.ModelCheckpoint(
-                    filepath=os.path.join(utils.MODELS_DIR, f'{self.model_name}_epoch_' + '{epoch}.h5'),
-                    save_weights_only=True,
-                ),
-            ]
+        kwargs['callbacks'] = [
+            keras.callbacks.TensorBoard(
+                log_dir=os.path.join(utils.LOGS_DIR, self.model_name),
+            ),
+            keras.callbacks.ModelCheckpoint(
+                filepath=os.path.join(utils.MODELS_DIR, f'{self.model_name}_epoch_' + '{epoch}.h5'),
+                save_weights_only=True,
+            ),
+        ]
         return self.model.fit(**kwargs)
-
-    def encode(self, x, batch_size=None, verbose=1):
-        return self.encoder.predict(x, batch_size, verbose)
-
-    def decode(self, x, batch_size=None, verbose=1):
-        return self.decoder.predict(x, batch_size, verbose)
-
-    def mask(self, x, batch_size=None, verbose=1):
-        return self.autoencoder.predict(x, batch_size, verbose)
 
     def get_config(self):
         return {
@@ -208,7 +203,7 @@ def test_model_and_save():
         dropout_rate=0.25,
     )
     model.summary()
-    exit(1)
+    # exit(1)
 
     model.compile()
     model.fit(
