@@ -1,9 +1,8 @@
-import keras.backend
 import numpy as np
 import tensorflow as tf
+from tensorflow import keras
 
 
-@tf.function
 def _pairwise_distances_embeddings(embeddings: tf.Tensor):
     """ Pairwise distances between flat embeddings.
 
@@ -31,7 +30,6 @@ def _pairwise_distances_embeddings(embeddings: tf.Tensor):
     return distances
 
 
-@tf.function
 def _pairwise_distances_masks(masks: tf.Tensor):
     """ Pairwise distances between square masks.
 
@@ -43,7 +41,6 @@ def _pairwise_distances_masks(masks: tf.Tensor):
     return tf.reduce_sum(tf.abs(x - y), axis=[-2, -1])
 
 
-@tf.function
 def embedding_loss(
         masks: tf.Tensor,
         embeddings: tf.Tensor,
@@ -67,7 +64,8 @@ def embedding_loss(
     embeddings_distances = _pairwise_distances_embeddings(embeddings)
     embeddings_distances /= tf.cast(tf.shape(embeddings)[1], tf.float32)
 
-    return tf.losses.mean_absolute_error(masks_distances, embeddings_distances)
+    loss = tf.losses.mean_absolute_error(masks_distances, embeddings_distances)
+    return loss / tf.cast((1 / 0.2), tf.float32)
 
 
 def dice_coef(true_masks, pred_masks, smooth: float = 1):
@@ -79,7 +77,13 @@ def dice_coef(true_masks, pred_masks, smooth: float = 1):
 
 
 def dice_loss(true_masks, pred_masks, smooth: float = 1):
-    return 1. - dice_coef(true_masks, pred_masks, smooth)
+    loss = 1. - dice_coef(true_masks, pred_masks, smooth)
+    return loss / tf.cast((1 / 0.8), tf.float32)
+
+
+def ae_loss(true_images, pred_images):
+    loss = tf.losses.mean_absolute_error(true_images, pred_images)
+    return loss / tf.cast((1 / 160), tf.float32)
 
 
 # noinspection DuplicatedCode
@@ -146,6 +150,6 @@ def _test_embedding_loss():
 
 
 if __name__ == '__main__':
-    # _test_pairwise_distances_embeddings()
-    # _test_pairwise_distances_masks()
+    _test_pairwise_distances_embeddings()
+    _test_pairwise_distances_masks()
     _test_embedding_loss()

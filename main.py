@@ -1,22 +1,26 @@
-from datagen import TrainSequence
-from net import HubmapMasker
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-TILE_SIZE = 512
+from model.datagen import TrainSequence
+from model.net import HubmapMasker
+
+from model import utils
 
 
 def train_model(epochs: int):
     model = HubmapMasker(
         model_name='main_model',
-        image_size=TILE_SIZE,
+        image_size=utils.GLOBALS['tile_size'],
         num_channels=3,
         filter_sizes=3,
-        filters=[32 * (i + 1) for i in range(5)],
+        filters=[16 * (i + 1) for i in range(4)],
         pool_size=2,
         smoothing_size=5,
         dropout_rate=0.25,
     )
     model.summary()
     model.compile()
+    # exit(1)
 
     train_gen = TrainSequence('train')
     valid_gen = TrainSequence('validate')
@@ -38,7 +42,7 @@ def resume_training(initial_epoch: int, final_epoch: int):
     weights = {
         'embedding': 1,
         'autoencoder': 1,
-        'masking': 2,
+        'mask': 2,
     }
     model.compile(weights=weights)
 
@@ -54,6 +58,7 @@ def resume_training(initial_epoch: int, final_epoch: int):
         validation_steps=len(valid_gen),
     )
     model.save()
+    return
 
 
 if __name__ == '__main__':

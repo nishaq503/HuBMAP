@@ -9,10 +9,18 @@ DATA_DIR = '/data/kaggle/hubmap'
 TRAIN_DIR = os.path.join(DATA_DIR, 'train')
 TEST_DIR = os.path.join(DATA_DIR, 'test')
 TF_TRAIN_DIR = os.path.join(DATA_DIR, 'tf_train')
-TF_TEST_DIR = os.path.join(DATA_DIR, 'tf_test')
 
 TRAIN_PATH = os.path.join(DATA_DIR, 'train.csv')
+TF_TRAIN_PATH = os.path.join(DATA_DIR, 'tf_train.csv')
 SAMPLE_SUBMISSION_PATH = os.path.join(DATA_DIR, 'sample_submission.csv')
+
+GLOBALS = {
+    'tile_size': 256,
+    'batch_size': 32,
+    's_threshold': 40,
+}
+GLOBALS['min_overlap'] = GLOBALS['tile_size'] // 8
+GLOBALS['p_threshold'] = 1000 * (GLOBALS['tile_size'] // 256) ** 2
 
 
 if __name__ == '__main__':

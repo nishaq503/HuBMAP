@@ -6,10 +6,11 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 from tensorflow import keras
 
-from loss_functions import dice_coef
-from loss_functions import dice_loss
-from loss_functions import embedding_loss
 from model import utils
+from model.loss_functions import ae_loss
+from model.loss_functions import dice_coef
+from model.loss_functions import dice_loss
+from model.loss_functions import embedding_loss
 
 
 class HubmapMasker(keras.models.Model):
@@ -80,7 +81,7 @@ class HubmapMasker(keras.models.Model):
             filter_shape=self.smoothing_size,
             padding='reflect',
         ), name='smoothing')(x)
-        masker_output = keras.layers.Activation('sigmoid', name='masking')(x)
+        masker_output = keras.layers.Activation('sigmoid', name='mask')(x)
 
         self.masker = keras.models.Model(
             inputs=input_layer,
@@ -123,12 +124,12 @@ class HubmapMasker(keras.models.Model):
         if loss is None:
             loss = {
                 'embedding': embedding_loss,
-                'autoencoder': 'mae',
-                'masking': dice_loss,
+                'autoencoder': ae_loss,
+                'mask': dice_loss,
             }
 
         if metrics is None:
-            metrics = {'masking': dice_coef}
+            metrics = {'mask': dice_coef}
 
         return self.model.compile(
             optimizer=optimizer,
@@ -148,6 +149,9 @@ class HubmapMasker(keras.models.Model):
             ),
         ]
         return self.model.fit(**kwargs)
+
+    def mask(self, images, verbose: int = 1):
+        return tf.squeeze(self.masker.predict(images, verbose=verbose))
 
     def get_config(self):
         return {
@@ -181,15 +185,14 @@ class HubmapMasker(keras.models.Model):
 
 
 def test_model_and_save():
-    batch_size, tile_size = 64, 512
-    image_shape = (batch_size, tile_size, tile_size, 3)
+    image_shape = (64, utils.GLOBALS['tile_size'], utils.GLOBALS['tile_size'], 3)
     images = tf.random.uniform(shape=image_shape)
     masks = tf.cast(tf.random.uniform(shape=tuple(image_shape[:-1])) > 0.5, dtype=tf.int32)
 
     ys = {
         'embedding': masks,
         'autoencoder': images,
-        'masking': masks,
+        'mask': masks,
     }
 
     model = HubmapMasker(
@@ -197,7 +200,7 @@ def test_model_and_save():
         image_size=image_shape[1],
         num_channels=image_shape[3],
         filter_sizes=3,
-        filters=[32 * (i + 1) for i in range(5)],
+        filters=[16 * (i + 1) for i in range(4)],
         pool_size=2,
         smoothing_size=5,
         dropout_rate=0.25,
@@ -209,7 +212,7 @@ def test_model_and_save():
     model.fit(
         x=images,
         y=ys,
-        batch_size=16,
+        batch_size=utils.GLOBALS['batch_size'],
         epochs=2,
         verbose=1,
         callbacks=None,
@@ -218,22 +221,22 @@ def test_model_and_save():
     return
 
 
-# def test_load_model():
-#     model = HubmapAutoencoder.load(os.path.join(utils.MODELS_DIR, 'test_model'))
-#     model.summary()
-#
-#     test_data = tf.random.normal(shape=(100, model.input_shape), mean=5.0, stddev=1.0)
-#     predictions = model.classify(test_data, batch_size=10)
-#     return predictions
+def test_load_model():
+    model = HubmapMasker.load(os.path.join(utils.MODELS_DIR, 'test_model'))
+    model.summary()
+
+    test_data = tf.random.uniform(shape=(64, utils.GLOBALS['tile_size'], utils.GLOBALS['tile_size'], 3))
+    predictions = model.mask(test_data)
+    return predictions
 
 
 if __name__ == '__main__':
-    import shutil
+    # import shutil
+    #
+    # for _dir in [utils.LOGS_DIR, utils.MODELS_DIR]:
+    #     shutil.rmtree(_dir)
+    #     os.makedirs(_dir, exist_ok=True)
 
-    for _dir in [utils.LOGS_DIR, utils.MODELS_DIR]:
-        shutil.rmtree(_dir)
-        os.makedirs(_dir, exist_ok=True)
-
-    test_model_and_save()
-    # print(test_load_model())
+    # test_model_and_save()
+    print(test_load_model().shape)
     pass
