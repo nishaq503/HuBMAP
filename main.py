@@ -23,23 +23,23 @@ def train_model(epochs: int):
     valid_gen = TrainSequence('validate')
     model.fit(
         x=iter(train_gen),
-        steps_per_epoch=len(train_gen),
+        steps_per_epoch=len(train_gen) // 5,
         epochs=epochs,
         verbose=1,
         validation_data=iter(valid_gen),
-        validation_steps=len(valid_gen),
+        validation_steps=len(valid_gen) // 5,
     )
     model.save()
     return
 
 
 def resume_training(initial_epoch: int, final_epoch: int):
-    model = HubmapMasker.load('main_model')
+    model = HubmapMasker.load('mask_model')
 
     weights = {
-        'embedding': 5,
-        'autoencoder': 2,
-        'mask': 1,
+        'embedding': 2,
+        'autoencoder': 1,
+        'mask': 4,
     }
     model.compile(weights=weights)
 
@@ -47,12 +47,12 @@ def resume_training(initial_epoch: int, final_epoch: int):
     valid_gen = TrainSequence('validate')
     model.fit(
         x=iter(train_gen),
-        steps_per_epoch=len(train_gen),
+        steps_per_epoch=len(train_gen) // 5,
         initial_epoch=initial_epoch,
         epochs=final_epoch,
         verbose=1,
         validation_data=iter(valid_gen),
-        validation_steps=len(valid_gen),
+        validation_steps=len(valid_gen) // 5,
     )
     model.save()
     return
