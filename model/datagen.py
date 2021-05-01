@@ -177,7 +177,7 @@ class TrainSequence(keras.utils.Sequence):
             for file_id in file_ids
         }
 
-        self.tiles_df = self.tiles_df[self.tiles_df['id'].isin(file_ids)]
+        self.tiles_df = self.tiles_df[self.tiles_df['id'].isin(file_ids)].reset_index(drop=True)
         self.glom_indices = list(self.tiles_df[self.tiles_df['encoding'] != ''].index)
         self.blank_indices = list(self.tiles_df[self.tiles_df['encoding'] == ''].index)
 
