@@ -54,7 +54,7 @@ def train_model(
         'mask': 1,
     }
     model.compile(optimizer='adam', loss=loss, weights=weights)
-    exit(1)
+    # exit(1)
 
     for epoch in range(initial_epoch, final_epoch):
         train_gen = TrainSequence(train_ids)
