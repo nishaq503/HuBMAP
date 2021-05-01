@@ -3,8 +3,8 @@ from typing import List
 
 import tensorflow as tf
 
-from datagen import TrainSequence
 from model import utils
+from model.datagen import TrainSequence
 from model.net import HubmapMasker
 
 tf.keras.backend.set_floatx('float16')
