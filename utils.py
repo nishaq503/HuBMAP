@@ -1,12 +1,12 @@
 import os
 
-DATA_DIR = '/data/kaggle/hubmap'
+DATA_DIR = '../input/hubmap-kidney-segmentation'
 TRAIN_DIR = os.path.join(DATA_DIR, 'train')
 TEST_DIR = os.path.join(DATA_DIR, 'test')
 TRAIN_PATH = os.path.join(DATA_DIR, 'train.csv')
 SAMPLE_SUBMISSION_PATH = os.path.join(DATA_DIR, 'sample_submission.csv')
 
-ROOT_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+ROOT_DIR = os.path.abspath(os.path.dirname(__file__))
 LOGS_DIR = os.path.join(ROOT_DIR, 'logs')
 MODELS_DIR = os.path.join(ROOT_DIR, 'saved_models')
 LOCAL_DIR = os.path.join(ROOT_DIR, 'local')
