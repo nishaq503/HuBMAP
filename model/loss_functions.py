@@ -41,10 +41,7 @@ def _pairwise_distances_masks(masks: tf.Tensor):
     return tf.reduce_sum(tf.abs(x - y), axis=[-2, -1])
 
 
-def embedding_loss(
-        masks: tf.Tensor,
-        embeddings: tf.Tensor,
-):
+def embedding_loss(masks: tf.Tensor, embeddings: tf.Tensor):
     """ Computes the loss for the embeddings.
 
     Make it so that the distances between embeddings are proportional to the distances between masks.

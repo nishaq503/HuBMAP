@@ -58,7 +58,7 @@ class HubmapMasker(keras.models.Model):
         # set up decoder
         args = list(zip(self.filters[:-1], skip_layers))
         for f, skip in reversed(args):
-            x = keras.layers.Conv2DTranspose(f, self.filter_sizes, self.pool_size, padding='same')(x)
+            x = keras.layers.UpSampling2D(size=(self.pool_size, self.pool_size))(x)
             x = keras.layers.Concatenate()([x, skip])
             x = self._conv_block(x, f)
             x = keras.layers.Dropout(self.dropout_rate)(x)
