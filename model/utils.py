@@ -16,8 +16,10 @@ SUBMISSION_PATH = os.path.join(ROOT_DIR, 'submission.csv')
 
 GLOBALS = {
     'tile_size': 1024,
-    'batch_size': 32,
+    'batch_size': 4,
     's_threshold': 40,
+    'model_depth': 7,
+    'base_filters': 16,
 }
 GLOBALS['min_overlap'] = GLOBALS['tile_size'] // 8
 GLOBALS['p_threshold'] = 1000 * (GLOBALS['tile_size'] // 256) ** 2

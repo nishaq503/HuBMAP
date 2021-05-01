@@ -6,8 +6,10 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 from tensorflow import keras
 
-from model import utils
 from model import loss_functions
+from model import utils
+
+tf.keras.backend.set_floatx('float16')
 
 
 class HubmapMasker(keras.models.Model):
@@ -121,7 +123,7 @@ class HubmapMasker(keras.models.Model):
         if loss is None:
             loss = {
                 'embedding': loss_functions.embedding_loss,
-                'autoencoder': loss_functions.ae_loss,
+                'autoencoder': 'mae',
                 'mask': loss_functions.dice_loss,
             }
 
@@ -182,9 +184,14 @@ class HubmapMasker(keras.models.Model):
 
 
 def test_model_and_save():
-    image_shape = (64, utils.GLOBALS['tile_size'], utils.GLOBALS['tile_size'], 3)
-    images = tf.random.uniform(shape=image_shape)
-    masks = tf.cast(tf.random.uniform(shape=tuple(image_shape[:-1])) > 0.5, dtype=tf.int32)
+    image_shape = (
+        utils.GLOBALS['batch_size'] * 4,
+        utils.GLOBALS['tile_size'],
+        utils.GLOBALS['tile_size'],
+        3
+    )
+    images = tf.random.uniform(shape=image_shape, dtype=tf.float16)
+    masks = tf.cast(tf.random.uniform(shape=tuple(image_shape[:-1])) > 0.5, dtype=tf.uint8)
 
     ys = {
         'embedding': masks,
@@ -192,20 +199,24 @@ def test_model_and_save():
         'mask': masks,
     }
 
+    filters = [
+        utils.GLOBALS['base_filters'] * (1 + i)
+        for i in range(utils.GLOBALS['model_depth'])
+    ]
     model = HubmapMasker(
         model_name='test_model',
         image_size=image_shape[1],
         num_channels=image_shape[3],
         filter_sizes=3,
-        filters=[32 * (1 + i) for i in range(4)],
+        filters=filters,
         pool_size=2,
         smoothing_size=5,
         dropout_rate=0.25,
     )
     model.summary()
+    model.compile()
     # exit(1)
 
-    model.compile()
     model.fit(
         x=images,
         y=ys,
@@ -228,7 +239,7 @@ def test_load_model():
 
 
 if __name__ == '__main__':
-    utils.delete_old()
+    # utils.delete_old()
     test_model_and_save()
     # print(test_load_model().shape)
     pass
