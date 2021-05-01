@@ -46,7 +46,7 @@ class HubmapMasker(keras.models.Model):
             x = self._conv_block(x, f, name=f'skip_{f}')
             skip_layers.append(x)
             x = keras.layers.MaxPool2D((self.pool_size, self.pool_size))(x)
-            x = keras.layers.Dropout(self.dropout_rate)(x)
+            x = keras.layers.SpatialDropout2D(self.dropout_rate)(x)
         else:
             x = self._conv_block(x, self.filters[-1], name='embedding')
 
@@ -63,7 +63,7 @@ class HubmapMasker(keras.models.Model):
             x = keras.layers.UpSampling2D(size=(self.pool_size, self.pool_size))(x)
             x = keras.layers.Concatenate()([x, skip])
             x = self._conv_block(x, f)
-            x = keras.layers.Dropout(self.dropout_rate)(x)
+            x = keras.layers.SpatialDropout2D(self.dropout_rate)(x)
 
         autoencoder_output = x
         autoencoder_output = self._conv_block(autoencoder_output, filters=3, name='autoencoder')
@@ -115,18 +115,27 @@ class HubmapMasker(keras.models.Model):
     # noinspection PyMethodOverriding
     def compile(
             self, *,
-            optimizer='adam',
+            optimizer=None,
             loss=None,
             weights=None,
             metrics=None,
     ):
+        if optimizer is None:
+            optimizer = keras.optimizers.Nadam(
+                learning_rate=1e-4,
+            )
         if loss is None:
             loss = {
                 'embedding': loss_functions.embedding_loss,
                 'autoencoder': 'mae',
                 'mask': loss_functions.dice_loss,
             }
-
+        if weights is None:
+            weights = {
+                'embedding': 1,
+                'autoencoder': 1,
+                'mask': 4,
+            }
         if metrics is None:
             metrics = {'mask': loss_functions.dice_coef}
 
