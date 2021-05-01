@@ -1,18 +1,17 @@
 import os
 
-ROOT_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
-LOGS_DIR = os.path.join(ROOT_DIR, 'logs')
-MODELS_DIR = os.path.join(ROOT_DIR, 'saved_models')
-RESULTS_DIR = os.path.join(ROOT_DIR, 'results')
-
 DATA_DIR = '/data/kaggle/hubmap'
 TRAIN_DIR = os.path.join(DATA_DIR, 'train')
 TEST_DIR = os.path.join(DATA_DIR, 'test')
-TF_TRAIN_DIR = os.path.join(DATA_DIR, 'tf_train')
-
 TRAIN_PATH = os.path.join(DATA_DIR, 'train.csv')
-TF_TRAIN_PATH = os.path.join(DATA_DIR, 'tf_train.csv')
 SAMPLE_SUBMISSION_PATH = os.path.join(DATA_DIR, 'sample_submission.csv')
+
+ROOT_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+LOGS_DIR = os.path.join(ROOT_DIR, 'logs')
+MODELS_DIR = os.path.join(ROOT_DIR, 'saved_models')
+
+TILES_PATH = os.path.join(ROOT_DIR, 'tiles.csv')
+SUBMISSION_PATH = os.path.join(ROOT_DIR, 'submission.csv')
 
 GLOBALS = {
     'tile_size': 256,
@@ -24,13 +23,13 @@ GLOBALS['p_threshold'] = 1000 * (GLOBALS['tile_size'] // 256) ** 2
 
 
 def verify_initial_data_presence():
-    for _path in [TRAIN_PATH, SAMPLE_SUBMISSION_PATH]:
+    for _path in [TRAIN_DIR, TEST_DIR, TRAIN_PATH, SAMPLE_SUBMISSION_PATH]:
         assert os.path.exists(_path)
     return
 
 
 def create_local_dirs():
-    for _dir in [LOGS_DIR, MODELS_DIR, RESULTS_DIR]:
+    for _dir in [LOGS_DIR, MODELS_DIR]:
         os.makedirs(_dir, exist_ok=True)
     return
 
