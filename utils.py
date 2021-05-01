@@ -1,25 +1,26 @@
 import os
 
-DATA_DIR = '../input/hubmap-kidney-segmentation'
+# DATA_DIR = '../input/hubmap-kidney-segmentation'
+DATA_DIR = '/data/kaggle/hubmap'
 TRAIN_DIR = f'{DATA_DIR}/train'
 TEST_DIR = f'{DATA_DIR}/test'
 TRAIN_PATH = f'{DATA_DIR}/train.csv'
 SAMPLE_SUBMISSION_PATH = f'{DATA_DIR}/sample_submission.csv'
 
-ROOT_DIR = './'
+ROOT_DIR = '.'
 LOGS_DIR = f'{ROOT_DIR}/logs'
 MODELS_DIR = f'{ROOT_DIR}/saved_models'
-LOCAL_DIR = f'{ROOT_DIR}/local'
+RESULTS_DIR = f'{ROOT_DIR}/results'
 
-TILES_PATH = f'{LOCAL_DIR}/tiles'
+TILES_PATH = f'{RESULTS_DIR}/tiles'
 SUBMISSION_PATH = f'{ROOT_DIR}/submission.csv'
 
 GLOBALS = {
-    'tile_size': 1024,
-    'batch_size': 4,
+    'tile_size': 512,
+    'batch_size': 8,
     's_threshold': 40,
-    'model_depth': 7,
-    'base_filters': 16,
+    'model_depth': 6,
+    'base_filters': 32,
 }
 GLOBALS['min_overlap'] = GLOBALS['tile_size'] // 8
 GLOBALS['p_threshold'] = 1000 * (GLOBALS['tile_size'] // 256) ** 2
@@ -32,7 +33,7 @@ def verify_initial_data_presence():
 
 
 def create_local_dirs():
-    for _dir in [LOGS_DIR, MODELS_DIR, LOCAL_DIR]:
+    for _dir in [LOGS_DIR, MODELS_DIR, RESULTS_DIR]:
         os.makedirs(_dir, exist_ok=True)
     return
 

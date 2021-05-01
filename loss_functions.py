@@ -48,21 +48,19 @@ def embedding_loss(masks: tf.Tensor, embeddings: tf.Tensor):
 
     :param masks: tf.uint8 rank-3 tensor with shape (batch_size, image_height, image_width)
                         or rank-4 tensor with shape (batch_size, image_height, image_width, 1)
-    :param embeddings: tf.float16 tensor with shape (batch_size, embedding_height, embedding_width, num_filters)
-    :return: tf.float16 scalar Mean Absolute/Squared Error between embedding distances and mask distances.
+    :param embeddings: tf.float32 tensor with shape (batch_size, embedding_height, embedding_width, num_filters)
+    :return: tf.float32 scalar Mean Absolute/Squared Error between embedding distances and mask distances.
     """
     # compute pairwise distances among masks and normalize by dimensionality
     masks_distances = _pairwise_distances_masks(masks)
     masks_distances /= tf.cast((tf.shape(masks)[1] * tf.shape(masks)[2]), tf.float32)
 
     # compute pairwise distances among flattened embeddings and normalize by dimensionality
-    embeddings = tf.cast(embeddings, tf.float32)
     embeddings = tf.reshape(embeddings, shape=(tf.shape(embeddings)[0], -1))
     embeddings_distances = _pairwise_distances_embeddings(embeddings)
     embeddings_distances /= tf.cast(tf.shape(embeddings)[1], tf.float32)
 
     loss = tf.losses.mean_absolute_error(masks_distances, embeddings_distances)
-    loss = tf.cast(loss, tf.float16)
     return loss
 
 
@@ -74,7 +72,6 @@ def dice_coef(true_masks, pred_masks, smooth: float = 1e-8):
     true_sum = tf.reduce_sum(true_masks, axis=[1, 2])
     pred_sum = tf.reduce_sum(pred_masks, axis=[1, 2])
     dice = (2. * intersection + smooth) / (true_sum + pred_sum + smooth)
-    dice = tf.cast(dice, tf.float16)
     return dice
 
 
@@ -141,10 +138,10 @@ def _test_embedding_loss():
     results = numpy.abs(embeddings_distances - masks_distances)
     results = numpy.mean(results, axis=0)
     masks = numpy.asarray(masks, dtype=numpy.uint8)
-    results = numpy.asarray(results, dtype=numpy.float16)
+    results = numpy.asarray(results, dtype=numpy.float32)
 
-    tf_masks = tf.convert_to_tensor(masks, dtype=tf.float16)
-    tf_embeddings = tf.convert_to_tensor(embeddings, dtype=tf.float16)
+    tf_masks = tf.convert_to_tensor(masks, dtype=tf.float32)
+    tf_embeddings = tf.convert_to_tensor(embeddings, dtype=tf.float32)
     tf_results = embedding_loss(tf_masks, tf_embeddings)
     assert numpy.allclose(results, tf_results), f'results were different:\n{results}\n\n{tf_results}'
     return

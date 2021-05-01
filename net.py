@@ -9,8 +9,6 @@ from tensorflow import keras
 import loss_functions
 import utils
 
-tf.keras.backend.set_floatx('float16')
-
 
 class HubmapMasker(keras.models.Model):
     def __init__(
@@ -232,15 +230,6 @@ def test_model_and_save():
     )
     model.save()
     return
-
-
-def test_load_model():
-    model = HubmapMasker.load(os.path.join(utils.MODELS_DIR, 'test_model'))
-    model.summary()
-
-    test_data = tf.random.uniform(shape=(64, utils.GLOBALS['tile_size'], utils.GLOBALS['tile_size'], 3))
-    predictions = model.mask(test_data)
-    return predictions
 
 
 if __name__ == '__main__':
