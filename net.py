@@ -6,8 +6,8 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 from tensorflow import keras
 
-from model import loss_functions
-from model import utils
+import loss_functions
+import utils
 
 tf.keras.backend.set_floatx('float16')
 
