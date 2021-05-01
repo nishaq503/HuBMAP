@@ -67,13 +67,14 @@ def embedding_loss(masks: tf.Tensor, embeddings: tf.Tensor):
 
 
 def dice_coef(true_masks, pred_masks, smooth: float = 1e-8):
-    true_masks = tf.cast(true_masks, dtype=tf.float16)
-    pred_masks = tf.cast(pred_masks, dtype=tf.float16)
+    true_masks = tf.cast(true_masks, dtype=tf.float32)
+    pred_masks = tf.cast(pred_masks, dtype=tf.float32)
 
     intersection = tf.reduce_sum(true_masks * pred_masks, axis=[1, 2])
     true_sum = tf.reduce_sum(true_masks, axis=[1, 2])
     pred_sum = tf.reduce_sum(pred_masks, axis=[1, 2])
     dice = (2. * intersection + smooth) / (true_sum + pred_sum + smooth)
+    dice = tf.cast(dice, tf.float16)
     return dice
 
 
@@ -89,7 +90,7 @@ def ae_loss(true_images, pred_images):
 
 # noinspection DuplicatedCode
 def _test_pairwise_distances_embeddings():
-    batch_size, embedding_dim = 16, int(numpy.prod((32, 32, 192)))
+    batch_size, embedding_dim = 16, int(numpy.prod((16, 16, 112)))
     embeddings = numpy.random.uniform(size=(batch_size, embedding_dim))
     results = numpy.zeros(shape=(batch_size, batch_size), dtype=numpy.float32)
     for i in range(batch_size):
@@ -126,7 +127,7 @@ def _test_pairwise_distances_masks():
 # noinspection DuplicatedCode
 def _test_embedding_loss():
     batch_size, image_size = 8, 1024
-    embedding_shape = (batch_size, 32, 32, 192)
+    embedding_shape = (batch_size, 16, 16, 112)
 
     masks = numpy.random.randint(low=0, high=2, size=(batch_size, image_size, image_size), dtype=numpy.int8)
     masks_distances = numpy.zeros(shape=(batch_size, batch_size), dtype=numpy.float32)
