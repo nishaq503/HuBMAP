@@ -1,15 +1,17 @@
+import os
 from typing import Optional
 from typing import Tuple
 
 import cv2
 import numpy as np
+import pandas as pd
 import rasterio
 from rasterio.windows import Window
 
 from model import utils
 
 
-def encoding_to_mask(encoding: str, shape: Tuple[int, int]) -> np.array:
+def encoding_to_mask(encoding: str, shape: Tuple[int, int]) -> np.ndarray:
     mask = np.zeros(np.prod(shape), dtype=np.uint8)
     splits = encoding.split()
     for i in range(0, len(splits), 2):
@@ -18,7 +20,7 @@ def encoding_to_mask(encoding: str, shape: Tuple[int, int]) -> np.array:
     return mask.reshape(shape).T
 
 
-def mask_to_encoding(mask: np.array) -> str:
+def mask_to_encoding(mask: np.ndarray) -> str:
     pixels = mask.T.flatten()
     runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
     starts = np.concatenate([[0], runs[1::2]])
@@ -26,7 +28,7 @@ def mask_to_encoding(mask: np.array) -> str:
     return ' '.join((' '.join(map(str, v)) for v in zip(starts + 1, lengths)))
 
 
-def _make_grid(shape: Tuple[int, int], tile_size: int = None, min_overlap: int = None):
+def _make_grid(shape: Tuple[int, int], tile_size: int = None, min_overlap: int = None) -> np.ndarray:
     """ Return Array of size (N, 4), where:
             N - number of tiles,
             2nd axis represents slices: x1, x2, y1, y2
@@ -74,30 +76,28 @@ def tiff_tile_generator(
     tile_size = utils.GLOBALS['tile_size'] if tile_size is None else tile_size
     min_overlap = utils.GLOBALS['min_overlap'] if min_overlap is None else min_overlap
 
-    tiff_reader = rasterio.open(tiff_path, transform=rasterio.Affine(1, 0, 0, 0, 1, 0))
-    if tiff_reader.count == 3:
-        layers = None
-    else:
-        layers = [rasterio.open(sub_dataset) for sub_dataset in tiff_reader.subdatasets]
+    raster = rasterio.open(tiff_path, transform=rasterio.Affine(1, 0, 0, 0, 1, 0))
+    layers = None if raster.count == 3 else [rasterio.open(sub_dataset) for sub_dataset in raster.subdatasets]
 
-    full_mask = None if encoding is None else encoding_to_mask(
+    full_mask: Optional[np.ndarray] = None if encoding is None else encoding_to_mask(
         encoding=encoding,
-        shape=(tiff_reader.shape[1], tiff_reader.shape[0]),
+        shape=(raster.shape[1], raster.shape[0]),
     )
-    slices = _make_grid(tiff_reader.shape, tile_size, min_overlap)
-    print(f'num_slices: {slices.shape[0]}')
+    slices = _make_grid(raster.shape, tile_size, min_overlap)
 
     for x1, x2, y1, y2 in slices:
         window = Window.from_slices((x1, x2), (y1, y2))
         image = np.zeros((tile_size, tile_size, 3), dtype=np.uint8)
-        if tiff_reader.count == 3:
-            image[:, :, :] = np.moveaxis(tiff_reader.read([1, 2, 3], window=window), 0, -1)
+        if raster.count == 3:
+            image[:, :, :] = np.moveaxis(raster.read([1, 2, 3], window=window), 0, -1)
         else:
             for channel in range(3):
                 image[:, :, channel] = layers[channel].read(window=window)
 
         if filter_tissue and _filter_tissue(image):
             continue
+
+        image = np.asarray(image, dtype=np.float32) / 255.0
 
         if full_mask is None:
             mask = None
@@ -113,4 +113,7 @@ def create_tiles_df():
 
 
 if __name__ == '__main__':
-    create_tiles_df()
+    _train_df = pd.read_csv(utils.TRAIN_PATH).set_index('id')
+    _tiff_paths = [os.path.join(utils.TRAIN_DIR, f'{_id}.tiff') for _id in _train_df.index]
+    _encodings = list(_train_df['encoding'])
+    list(map(lambda _pe: tiff_tile_generator(_pe[0], _pe[1]), zip(_tiff_paths, _encodings)))
