@@ -1,13 +1,13 @@
 from glob import glob
 from typing import List
 
-import tensorflow as tf
+from tensorflow import keras
 
 from model import utils
 from model.datagen import TrainSequence
 from model.net import HubmapMasker
 
-tf.keras.backend.set_floatx('float16')
+keras.backend.set_floatx('float16')
 
 
 def train_model(
@@ -31,17 +31,17 @@ def train_model(
     )
     model.summary()
     model.compile()
-    exit(1)
+    # exit(1)
 
     train_gen = TrainSequence(train_ids)
     valid_gen = TrainSequence(val_ids)
     model.fit(
         x=iter(train_gen),
-        steps_per_epoch=len(train_gen),
+        steps_per_epoch=len(train_gen) // 5,
         epochs=epochs,
         verbose=1,
         validation_data=iter(valid_gen),
-        validation_steps=len(valid_gen),
+        validation_steps=len(valid_gen) // 5,
     )
     model.save()
     return
@@ -69,12 +69,12 @@ def resume_training(
     valid_gen = TrainSequence(val_ids)
     model.fit(
         x=iter(train_gen),
-        steps_per_epoch=len(train_gen),
+        steps_per_epoch=len(train_gen) // 5,
         initial_epoch=initial_epoch,
         epochs=final_epoch,
         verbose=1,
         validation_data=iter(valid_gen),
-        validation_steps=len(valid_gen),
+        validation_steps=len(valid_gen) // 5,
     )
     model.save()
     return
