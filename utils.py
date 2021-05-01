@@ -17,7 +17,7 @@ SUBMISSION_PATH = f'{ROOT_DIR}/submission.csv'
 
 GLOBALS = {
     'tile_size': 512,
-    'batch_size': 8,
+    'batch_size': 4,
     's_threshold': 40,
     'model_depth': 6,
     'base_filters': 32,
