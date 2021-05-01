@@ -78,11 +78,7 @@ def _filter_tissue(image) -> bool:
     return all_black or all_gray
 
 
-def create_tiles_df(
-        tile_size: int = None,
-        min_overlap: int = None,
-        filter_tissue: bool = True,
-):
+def create_tiles_df(tile_size: int = None, min_overlap: int = None, filter_tissue: bool = True):
     tile_size = utils.GLOBALS['tile_size'] if tile_size is None else tile_size
     min_overlap = utils.GLOBALS['min_overlap'] if min_overlap is None else min_overlap
 
