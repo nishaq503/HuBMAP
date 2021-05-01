@@ -17,7 +17,6 @@ class HubmapMasker(keras.models.Model):
             self,
             model_name: str,
             image_size: int,
-            num_channels: int,
             filter_sizes: int,
             filters: List[int],
             pool_size: int,
@@ -29,8 +28,7 @@ class HubmapMasker(keras.models.Model):
         # store arguments for config
         self.model_name = model_name
         self.image_size = image_size
-        self.num_channels = num_channels
-        self.image_shape = (image_size, image_size, num_channels)
+        self.image_shape = (image_size, image_size, 3)
         self.filter_sizes = filter_sizes
         self.filters = filters
         self.pool_size = pool_size
@@ -165,7 +163,6 @@ class HubmapMasker(keras.models.Model):
         return {
             'model_name': self.model_name,
             'image_size': self.image_size,
-            'num_channels': self.num_channels,
             'filter_sizes': self.filter_sizes,
             'filters': self.filters,
             'pool_size': self.pool_size,
@@ -215,7 +212,6 @@ def test_model_and_save():
     model = HubmapMasker(
         model_name='test_model',
         image_size=image_shape[1],
-        num_channels=image_shape[3],
         filter_sizes=3,
         filters=filters,
         pool_size=2,
