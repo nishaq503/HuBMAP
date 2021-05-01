@@ -15,8 +15,8 @@ TILES_PATH = os.path.join(LOCAL_DIR, 'tiles')
 SUBMISSION_PATH = os.path.join(ROOT_DIR, 'submission.csv')
 
 GLOBALS = {
-    'tile_size': 256,
-    'batch_size': 8,
+    'tile_size': 1024,
+    'batch_size': 32,
     's_threshold': 40,
 }
 GLOBALS['min_overlap'] = GLOBALS['tile_size'] // 8

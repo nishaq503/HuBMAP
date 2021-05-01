@@ -118,10 +118,10 @@ def create_tiles_df(
             tiles_df = tiles_df.append(dict(zip(columns, values)), ignore_index=True)
 
             count += 1
-            if count % 1000 == 0:
-                end = '\n' if count % 10_000 == 0 else ' '
-                print(f'{count:5d}', end=end)
-        print(f'{count:5d}')
+            if count % 100 == 0:
+                end = '\n' if count % 1000 == 0 else ' '
+                print(f'{count:4d}', end=end)
+        print(f'{count:4d}')
 
     path = f'{utils.TILES_PATH}-{tile_size}-{min_overlap}.csv.gz'
     tiles_df.to_csv(path, index=False)
