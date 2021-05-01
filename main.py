@@ -3,9 +3,9 @@ from typing import List
 
 from tensorflow import keras
 
-from model import utils
-from model.datagen import TrainSequence
-from model.net import HubmapMasker
+import utils
+from datagen import TrainSequence
+from net import HubmapMasker
 
 keras.backend.set_floatx('float16')
 
@@ -63,7 +63,7 @@ def resume_training(
         'mask': 4,
     }
     model.compile(weights=weights)
-    exit(1)
+    # exit(1)
 
     train_gen = TrainSequence(train_ids)
     valid_gen = TrainSequence(val_ids)

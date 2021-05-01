@@ -12,7 +12,7 @@ import tensorflow as tf
 from rasterio.windows import Window
 from tensorflow import keras
 
-from model import utils
+import utils
 
 
 def encoding_to_mask(encoding: str, shape: Tuple[int, int]) -> numpy.ndarray:
