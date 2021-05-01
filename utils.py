@@ -1,18 +1,18 @@
 import os
 
 DATA_DIR = '../input/hubmap-kidney-segmentation'
-TRAIN_DIR = os.path.join(DATA_DIR, 'train')
-TEST_DIR = os.path.join(DATA_DIR, 'test')
-TRAIN_PATH = os.path.join(DATA_DIR, 'train.csv')
-SAMPLE_SUBMISSION_PATH = os.path.join(DATA_DIR, 'sample_submission.csv')
+TRAIN_DIR = f'{DATA_DIR}/train'
+TEST_DIR = f'{DATA_DIR}/test'
+TRAIN_PATH = f'{DATA_DIR}/train.csv'
+SAMPLE_SUBMISSION_PATH = f'{DATA_DIR}/sample_submission.csv'
 
 ROOT_DIR = './'
-LOGS_DIR = os.path.join(ROOT_DIR, 'logs')
-MODELS_DIR = os.path.join(ROOT_DIR, 'saved_models')
-LOCAL_DIR = os.path.join(ROOT_DIR, 'local')
+LOGS_DIR = f'{ROOT_DIR}/logs'
+MODELS_DIR = f'{ROOT_DIR}/saved_models'
+LOCAL_DIR = f'{ROOT_DIR}/local'
 
-TILES_PATH = os.path.join(LOCAL_DIR, 'tiles')
-SUBMISSION_PATH = os.path.join(ROOT_DIR, 'submission.csv')
+TILES_PATH = f'{LOCAL_DIR}/tiles'
+SUBMISSION_PATH = f'{ROOT_DIR}/submission.csv'
 
 GLOBALS = {
     'tile_size': 1024,
@@ -27,7 +27,7 @@ GLOBALS['p_threshold'] = 1000 * (GLOBALS['tile_size'] // 256) ** 2
 
 def verify_initial_data_presence():
     for _path in [TRAIN_DIR, TEST_DIR, TRAIN_PATH, SAMPLE_SUBMISSION_PATH]:
-        assert os.path.exists(_path)
+        assert os.path.exists(_path), f'path not found: {_path}'
     return
 
 
