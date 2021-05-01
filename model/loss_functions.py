@@ -83,11 +83,6 @@ def dice_loss(true_masks, pred_masks, smooth: float = 1e-8):
     return loss
 
 
-def ae_loss(true_images, pred_images):
-    loss = tf.losses.mean_absolute_error(true_images, pred_images)
-    return loss
-
-
 # noinspection DuplicatedCode
 def _test_pairwise_distances_embeddings():
     batch_size, embedding_dim = 16, int(numpy.prod((16, 16, 112)))
