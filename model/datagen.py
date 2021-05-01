@@ -238,8 +238,8 @@ if __name__ == '__main__':
     # _tiles_df = create_tiles_df()
     # print(_tiles_df.shape)
     # print(_tiles_df.head())
-    _file_list = [_name.split('/')[-1].split('.')[0] for _name in glob(f'{utils.TRAIN_DIR}/*.tiff')]
-    _train_gen = TrainSequence(_file_list)
+    _file_ids = [_name.split('/')[-1].split('.')[0] for _name in glob(f'{utils.TRAIN_DIR}/*.tiff')]
+    _train_gen = TrainSequence(_file_ids)
     print(len(_train_gen.glom_indices), len(_train_gen.blank_indices))
     print(len(_train_gen))
     _images, _ys = _train_gen[len(_train_gen) - 10]
