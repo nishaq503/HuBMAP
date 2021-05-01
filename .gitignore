@@ -133,4 +133,4 @@ dmypy.json
 data
 logs
 saved_models
-results
+local

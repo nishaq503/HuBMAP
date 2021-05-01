@@ -9,8 +9,9 @@ SAMPLE_SUBMISSION_PATH = os.path.join(DATA_DIR, 'sample_submission.csv')
 ROOT_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 LOGS_DIR = os.path.join(ROOT_DIR, 'logs')
 MODELS_DIR = os.path.join(ROOT_DIR, 'saved_models')
+LOCAL_DIR = os.path.join(ROOT_DIR, 'local')
 
-TILES_PATH = os.path.join(ROOT_DIR, 'tiles.csv')
+TILES_PATH = os.path.join(LOCAL_DIR, 'tiles')
 SUBMISSION_PATH = os.path.join(ROOT_DIR, 'submission.csv')
 
 GLOBALS = {
@@ -29,7 +30,7 @@ def verify_initial_data_presence():
 
 
 def create_local_dirs():
-    for _dir in [LOGS_DIR, MODELS_DIR]:
+    for _dir in [LOGS_DIR, MODELS_DIR, LOCAL_DIR]:
         os.makedirs(_dir, exist_ok=True)
     return
 
