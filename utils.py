@@ -6,7 +6,7 @@ TEST_DIR = os.path.join(DATA_DIR, 'test')
 TRAIN_PATH = os.path.join(DATA_DIR, 'train.csv')
 SAMPLE_SUBMISSION_PATH = os.path.join(DATA_DIR, 'sample_submission.csv')
 
-ROOT_DIR = os.path.abspath(os.path.dirname(__file__))
+ROOT_DIR = '/kaggle/working'
 LOGS_DIR = os.path.join(ROOT_DIR, 'logs')
 MODELS_DIR = os.path.join(ROOT_DIR, 'saved_models')
 LOCAL_DIR = os.path.join(ROOT_DIR, 'local')
