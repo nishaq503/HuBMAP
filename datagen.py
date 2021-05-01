@@ -5,7 +5,6 @@ from typing import Tuple
 
 import cv2
 import numpy
-import numpy as np
 import pandas
 import rasterio
 import tensorflow as tf
@@ -205,8 +204,8 @@ class TrainSequence(keras.utils.Sequence):
         end = (index + 1) * self.batch_size // 2
         end = min(end, len(self.glom_indices), len(self.blank_indices))
 
-        images = np.zeros(shape=((end - start) * 2, self.tile_size, self.tile_size, 3), dtype=numpy.float16)
-        masks = np.zeros(shape=((end - start) * 2, self.tile_size, self.tile_size), dtype=numpy.uint8)
+        images = numpy.zeros(shape=((end - start) * 2, self.tile_size, self.tile_size, 3), dtype=numpy.float16)
+        masks = numpy.zeros(shape=((end - start) * 2, self.tile_size, self.tile_size), dtype=numpy.uint8)
         j = 0
         for i in self.glom_indices[start:end]:
             file_id, x1, x2, y1, y2, encoding = list(self.tiles_df.iloc[i])
