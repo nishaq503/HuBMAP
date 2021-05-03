@@ -184,7 +184,7 @@ class HubmapMasker(keras.models.Model):
 
 def test_model():
     filters = [
-        utils.GLOBALS['base_filters'] * (1 + i)
+        utils.GLOBALS['base_filters'] * (2 ** i)
         for i in range(utils.GLOBALS['model_depth'])
     ]
     model = HubmapMasker(
