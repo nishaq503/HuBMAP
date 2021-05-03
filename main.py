@@ -20,7 +20,7 @@ def train_model(model_name: str, initial_epoch: int, final_epoch: int, train_ids
             filter_sizes=3,
             filters=filters,
             pool_size=2,
-            smoothing_size=5,
+            smoothing_size=3,
             dropout_rate=0.25,
         )
     else:
@@ -76,7 +76,7 @@ def train_fold(model_name: str, fold: int, fold_size: int, file_ids: List[str]):
 
 
 if __name__ == '__main__':
-    utils.delete_old()
+    # utils.delete_old()
 
     _file_ids = [_name.split('/')[-1].split('.')[0] for _name in glob(f'{utils.TRAIN_DIR}/*.tiff')]
     _file_ids = list(sorted(_file_ids))

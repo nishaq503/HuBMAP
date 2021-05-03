@@ -1,6 +1,7 @@
 import json
 import os
 from typing import List
+from typing import Optional
 
 import tensorflow as tf
 import tensorflow_addons as tfa
@@ -18,7 +19,7 @@ class HubmapMasker(keras.models.Model):
             filter_sizes: int,
             filters: List[int],
             pool_size: int,
-            smoothing_size: int,
+            smoothing_size: Optional[int],
             dropout_rate: float,
     ):
         super(HubmapMasker, self).__init__()
@@ -71,11 +72,12 @@ class HubmapMasker(keras.models.Model):
 
         x = keras.layers.Conv2D(1, self.filter_sizes, padding='same')(x)
         x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.Lambda(lambda arg: tfa.image.gaussian_filter2d(
-            image=arg,
-            filter_shape=self.smoothing_size,
-            padding='reflect',
-        ), name='smoothing')(x)
+        if self.smoothing_size is not None:
+            x = keras.layers.Lambda(lambda arg: tfa.image.gaussian_filter2d(
+                image=arg,
+                filter_shape=self.smoothing_size,
+                padding='reflect',
+            ), name='smoothing')(x)
         masker_output = keras.layers.Activation('sigmoid', name='mask')(x)
 
         self.masker = keras.models.Model(
