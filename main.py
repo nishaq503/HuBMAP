@@ -3,7 +3,6 @@ from typing import List
 
 from tensorflow import keras
 
-import loss_functions
 import utils
 from datagen import TrainSequence
 from net import HubmapMasker
@@ -42,32 +41,26 @@ def train_model(
     else:
         model = HubmapMasker.load(model_name)
     model.summary()
-
-    loss = {
-        'embedding': loss_functions.embedding_loss,
-        'autoencoder': 'mae',
-        'mask': loss_functions.dice_loss,
-    }
-    weights = {
-        'embedding': 8,
-        'autoencoder': 8,
-        'mask': 1,
-    }
-    model.compile(optimizer='adam', loss=loss, weights=weights)
     # exit(1)
 
-    for epoch in range(initial_epoch, final_epoch):
-        train_gen = TrainSequence(train_ids)
-        valid_gen = TrainSequence(val_ids)
-        model.fit(
-            x=iter(train_gen),
-            steps_per_epoch=len(train_gen),
-            initial_epoch=epoch,
-            epochs=epoch + 1,
-            verbose=1,
-            validation_data=iter(valid_gen),
-            validation_steps=len(valid_gen),
-        )
+    weights = {
+        'embedding': 4,
+        'autoencoder': 4,
+        'mask': 1,
+    }
+    model.compile(weights=weights)
+
+    train_gen = TrainSequence(train_ids)
+    valid_gen = TrainSequence(val_ids)
+    model.fit(
+        x=iter(train_gen),
+        steps_per_epoch=len(train_gen),
+        initial_epoch=initial_epoch,
+        epochs=final_epoch,
+        verbose=1,
+        validation_data=iter(valid_gen),
+        validation_steps=len(valid_gen),
+    )
     model.save()
     return
 
