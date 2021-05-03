@@ -109,29 +109,24 @@ class HubmapMasker(keras.models.Model):
         return self.model.summary(**kwargs)
 
     # noinspection PyMethodOverriding
-    def compile(
-            self, *,
-            optimizer=None,
-            loss=None,
-            weights=None,
-            metrics=None,
-    ):
+    def compile(self, *, optimizer=None, loss=None, weights=None, metrics=None):
         if optimizer is None:
-            optimizer = keras.optimizers.Nadam(
-                learning_rate=1e-4,
-            )
+            optimizer = keras.optimizers.Nadam(learning_rate=1e-2)
+
         if loss is None:
             loss = {
                 'embedding': loss_functions.embedding_loss,
-                'autoencoder': 'mae',
+                'autoencoder': 'mse',
                 'mask': loss_functions.dice_loss,
             }
+
         if weights is None:
             weights = {
-                'embedding': 1,
-                'autoencoder': 1,
-                'mask': 4,
+                'embedding': 4,
+                'autoencoder': 4,
+                'mask': 1,
             }
+
         if metrics is None:
             metrics = {'mask': loss_functions.dice_coef}
 
@@ -187,7 +182,25 @@ class HubmapMasker(keras.models.Model):
         return model
 
 
-def test_model_and_save():
+def test_model():
+    filters = [
+        utils.GLOBALS['base_filters'] * (1 + i)
+        for i in range(utils.GLOBALS['model_depth'])
+    ]
+    model = HubmapMasker(
+        model_name='test_model',
+        image_size=utils.GLOBALS['tile_size'],
+        filter_sizes=3,
+        filters=filters,
+        pool_size=2,
+        smoothing_size=5,
+        dropout_rate=0.25,
+    )
+    model.summary()
+    return model
+
+
+def test_fit_and_save(model: HubmapMasker):
     image_shape = (
         utils.GLOBALS['batch_size'] * 4,
         utils.GLOBALS['tile_size'],
@@ -203,23 +216,7 @@ def test_model_and_save():
         'mask': masks,
     }
 
-    filters = [
-        utils.GLOBALS['base_filters'] * (1 + i)
-        for i in range(utils.GLOBALS['model_depth'])
-    ]
-    model = HubmapMasker(
-        model_name='test_model',
-        image_size=image_shape[1],
-        filter_sizes=3,
-        filters=filters,
-        pool_size=2,
-        smoothing_size=5,
-        dropout_rate=0.25,
-    )
-    model.summary()
     model.compile()
-    # exit(1)
-
     model.fit(
         x=images,
         y=ys,
@@ -229,11 +226,11 @@ def test_model_and_save():
         callbacks=None,
     )
     model.save()
-    return
+    return model
 
 
 if __name__ == '__main__':
     # utils.delete_old()
-    test_model_and_save()
-    # print(test_load_model().shape)
+    _model = test_model()
+    _model = test_fit_and_save(_model)
     pass
