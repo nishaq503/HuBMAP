@@ -158,9 +158,10 @@ class TrainSequence(keras.utils.Sequence):
         if len(file_ids) == 0:
             raise ValueError('no files given')
 
-        self.batch_size = utils.GLOBALS['batch_size'] if batch_size is None else batch_size
-        if self.batch_size % 2 != 0:
+        batch_size = utils.GLOBALS['batch_size'] if batch_size is None else batch_size
+        if batch_size % 2 != 0:
             raise ValueError(f'Batch Size must be even. Got {batch_size} instead.')
+        self.half_batch_size = batch_size // 2
 
         self.tile_size = utils.GLOBALS['tile_size'] if tile_size is None else tile_size
         self.min_overlap = utils.GLOBALS['min_overlap'] if min_overlap is None else min_overlap
@@ -180,49 +181,34 @@ class TrainSequence(keras.utils.Sequence):
         self.glom_indices = list(self.tiles_df[self.tiles_df['encoding'] != ''].index)
         self.blank_indices = list(self.tiles_df[self.tiles_df['encoding'] == ''].index)
 
-        min_len = min(len(self.glom_indices), len(self.blank_indices))
-        steps_per_epoch = min_len // (self.batch_size // 2)
-        if min_len % (self.batch_size // 2) != 0:
-            steps_per_epoch += 1
-        self.steps_per_epoch = steps_per_epoch
-
+        self.steps_per_epoch = min(len(self.glom_indices), len(self.blank_indices)) // self.half_batch_size
+        self.batch_indices = numpy.zeros(shape=(self.steps_per_epoch, self.half_batch_size * 2), dtype=numpy.uint64)
         self.on_epoch_end()
 
     def on_epoch_end(self):
         numpy.random.shuffle(self.glom_indices)
         numpy.random.shuffle(self.blank_indices)
+
+        for i in range(self.steps_per_epoch):
+            start, end = i * self.half_batch_size, (i + 1) * self.half_batch_size
+            self.batch_indices[i, :self.half_batch_size] = self.glom_indices[start:end]
+            self.batch_indices[i, self.half_batch_size:] = self.blank_indices[start:end]
         return
 
     def __len__(self):
         return self.steps_per_epoch
 
     def __getitem__(self, index: int):
-        if index >= self.steps_per_epoch:
-            raise IndexError
+        images = numpy.zeros(shape=(self.half_batch_size * 2, self.tile_size, self.tile_size, 3), dtype=numpy.float32)
+        masks = numpy.zeros(shape=(self.half_batch_size * 2, self.tile_size, self.tile_size), dtype=numpy.uint8)
 
-        start = index * self.batch_size // 2
-        end = (index + 1) * self.batch_size // 2
-        end = min(end, len(self.glom_indices), len(self.blank_indices))
-
-        images = numpy.zeros(shape=((end - start) * 2, self.tile_size, self.tile_size, 3), dtype=numpy.float16)
-        masks = numpy.zeros(shape=((end - start) * 2, self.tile_size, self.tile_size), dtype=numpy.uint8)
-        j = 0
-        for i in self.glom_indices[start:end]:
-            file_id, x1, x2, y1, y2, encoding = list(self.tiles_df.iloc[i])
+        for i, b in enumerate(self.batch_indices[index]):
+            file_id, x1, x2, y1, y2, encoding = list(self.tiles_df.iloc[b])
             raster, layers = self.rasters[file_id]
+            images[i] = _get_tile(self.tile_size, raster, layers, x1, x2, y1, y2, normalize=True)
+            masks[i] = encoding_to_mask(encoding, (self.tile_size, self.tile_size))
 
-            images[j] = _get_tile(self.tile_size, raster, layers, x1, x2, y1, y2, normalize=True)
-            masks[j] = encoding_to_mask(encoding, (self.tile_size, self.tile_size))
-            j += 1
-
-        for i in self.blank_indices[start:end]:
-            file_id, x1, x2, y1, y2, _ = list(self.tiles_df.iloc[i])
-            raster, layers = self.rasters[file_id]
-
-            images[j] = _get_tile(self.tile_size, raster, layers, x1, x2, y1, y2, normalize=True)
-            j += 1
-
-        images = tf.convert_to_tensor(images, dtype=tf.float16)
+        images = tf.convert_to_tensor(images, dtype=tf.float32)
         masks = tf.convert_to_tensor(masks, dtype=tf.uint8)
         ys = {
             'embedding': masks,
@@ -238,8 +224,8 @@ if __name__ == '__main__':
     # print(_tiles_df.shape)
     # print(_tiles_df.head())
     _file_ids = [_name.split('/')[-1].split('.')[0] for _name in glob(f'{utils.TRAIN_DIR}/*.tiff')]
-    _train_gen = TrainSequence(_file_ids)
+    _train_gen = TrainSequence(_file_ids[:1])
     print(len(_train_gen.glom_indices), len(_train_gen.blank_indices))
     print(len(_train_gen))
-    _images, _ys = _train_gen[len(_train_gen) - 10]
+    _images, _ys = _train_gen[len(_train_gen) - 1]
     print(tf.shape(_images), tf.reduce_sum(_ys['mask'], axis=[1, 2]))
