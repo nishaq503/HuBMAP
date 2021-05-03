@@ -122,8 +122,8 @@ class HubmapMasker(keras.models.Model):
 
         if weights is None:
             weights = {
-                'embedding': 4,
-                'autoencoder': 4,
+                'embedding': 1,
+                'autoencoder': 1,
                 'mask': 1,
             }
 
@@ -232,5 +232,5 @@ def test_fit_and_save(model: HubmapMasker):
 if __name__ == '__main__':
     # utils.delete_old()
     _model = test_model()
-    _model = test_fit_and_save(_model)
+    # _model = test_fit_and_save(_model)
     pass
