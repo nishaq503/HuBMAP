@@ -19,7 +19,7 @@ GLOBALS = {
     'tile_size': 512,
     'batch_size': 4,
     's_threshold': 40,
-    'model_depth': 4,
+    'model_depth': 5,
     'base_filters': 32,
 }
 GLOBALS['min_overlap'] = GLOBALS['tile_size'] // 8

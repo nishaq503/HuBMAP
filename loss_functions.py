@@ -1,5 +1,6 @@
 import numpy
 import tensorflow as tf
+from tensorflow import keras
 
 import utils
 
@@ -90,6 +91,12 @@ def dice_coef(true_masks, pred_masks, smooth: float = 1e-8):
 def dice_loss(true_masks, pred_masks, smooth: float = 1e-8):
     loss = 1. - dice_coef(true_masks, pred_masks, smooth)
     return loss
+
+
+def dice_bce(true_masks, pred_masks, smooth: float = 1e-8):
+    bce_loss = keras.losses.binary_crossentropy(true_masks, pred_masks)
+    bce_loss = tf.reduce_mean(bce_loss, axis=1)
+    return dice_loss(true_masks, pred_masks, smooth) + bce_loss
 
 
 # noinspection DuplicatedCode

@@ -181,28 +181,31 @@ class TrainSequence(keras.utils.Sequence):
         self.glom_indices = list(self.tiles_df[self.tiles_df['encoding'] != ''].index)
         self.blank_indices = list(self.tiles_df[self.tiles_df['encoding'] == ''].index)
 
-        self.steps_per_epoch = min(len(self.glom_indices), len(self.blank_indices)) // self.half_batch_size
-        self.batch_indices = numpy.zeros(shape=(self.steps_per_epoch, self.half_batch_size * 2), dtype=numpy.uint64)
+        self.num_batches = min(len(self.glom_indices), len(self.blank_indices)) // self.half_batch_size
+        self.batch_indices = numpy.zeros(shape=(self.num_batches, self.half_batch_size * 2), dtype=numpy.uint64)
         self.on_epoch_end()
 
     def on_epoch_end(self):
         numpy.random.shuffle(self.glom_indices)
         numpy.random.shuffle(self.blank_indices)
 
-        for i in range(self.steps_per_epoch):
+        for i in range(self.num_batches):
             start, end = i * self.half_batch_size, (i + 1) * self.half_batch_size
             self.batch_indices[i, :self.half_batch_size] = self.glom_indices[start:end]
             self.batch_indices[i, self.half_batch_size:] = self.blank_indices[start:end]
         return
 
     def __len__(self):
-        return self.steps_per_epoch
+        return self.num_batches
 
     def __getitem__(self, index: int):
+        return self.get_batch(self.batch_indices[index])
+
+    def get_batch(self, indices):
         images = numpy.zeros(shape=(self.half_batch_size * 2, self.tile_size, self.tile_size, 3), dtype=numpy.float32)
         masks = numpy.zeros(shape=(self.half_batch_size * 2, self.tile_size, self.tile_size), dtype=numpy.uint8)
 
-        for i, b in enumerate(self.batch_indices[index]):
+        for i, b in enumerate(indices):
             file_id, x1, x2, y1, y2, encoding = list(self.tiles_df.iloc[b])
             raster, layers = self.rasters[file_id]
             images[i] = _get_tile(self.tile_size, raster, layers, x1, x2, y1, y2, normalize=True)

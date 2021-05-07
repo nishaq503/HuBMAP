@@ -58,7 +58,7 @@ class HubmapMasker(keras.models.Model):
         args = list(zip(self.filters[:-1], skip_layers))
         for f, skip in reversed(args):
             x = keras.layers.UpSampling2D(size=(self.pool_size, self.pool_size))(x)
-            x = keras.layers.Concatenate()([x, skip])
+            # x = keras.layers.Concatenate()([x, skip])
             x = self._conv_block(x, f)
             x = keras.layers.SpatialDropout2D(self.dropout_rate)(x)
 
@@ -124,9 +124,9 @@ class HubmapMasker(keras.models.Model):
 
         if weights is None:
             weights = {
-                'embedding': 1,
-                'autoencoder': 1,
-                'mask': 1,
+                'embedding': 1. / 256.,
+                'autoencoder': 1.,
+                'mask': 1.,
             }
 
         if metrics is None:
@@ -213,8 +213,7 @@ def test_fit_and_save(model: HubmapMasker):
     masks = tf.cast(tf.random.uniform(shape=tuple(image_shape[:-1])) > 0.5, dtype=tf.uint8)
 
     ys = {
-        'embedding': masks,
-        'autoencoder': images,
+        # 'embedding': masks,
         'mask': masks,
     }
 
