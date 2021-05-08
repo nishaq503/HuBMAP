@@ -1,34 +1,36 @@
-import os
 from glob import glob
 from typing import List
 
-from tensorflow import keras
+import tensorflow as tf
 
 import loss_functions
 import utils
 from datagen import TrainSequence
 from net import HubmapMasker
 
+physical_devices = tf.config.list_physical_devices('GPU')
+tf.config.experimental.set_memory_growth(physical_devices[0], True)
+
 
 def train_model(model_name: str, initial_epoch: int, final_epoch: int, train_ids: List[str], val_ids: List[str]):
-    filters = [
-        utils.GLOBALS['base_filters'] * (2 ** i)
-        for i in range(utils.GLOBALS['model_depth'])
-    ]
-    model = HubmapMasker(
-        model_name=model_name,
-        image_size=utils.GLOBALS['tile_size'],
-        filter_sizes=3,
-        filters=filters,
-        pool_size=2,
-        smoothing_size=3,
-        dropout_rate=0.4,
-    )
-    if initial_epoch != 0:
-        path = os.path.join(utils.MODELS_DIR, model_name)
-        model.model.load_weights(f'{path}_epoch_{initial_epoch}.h5')
+    if initial_epoch == 0:
+        filters = [
+            utils.GLOBALS['base_filters'] * (2 ** i)
+            for i in range(utils.GLOBALS['model_depth'])
+        ]
+        model = HubmapMasker(
+            model_name=model_name,
+            image_size=utils.GLOBALS['tile_size'],
+            filter_sizes=3,
+            filters=filters,
+            pool_size=2,
+            smoothing_size=3,
+            dropout_rate=0.4,
+        )
+        model.save()
+    else:
+        model = HubmapMasker.load(model_name)
     model.summary()
-    # model.save()
     # exit(1)
 
     optimizer = keras.optimizers.Nadam()
@@ -38,9 +40,9 @@ def train_model(model_name: str, initial_epoch: int, final_epoch: int, train_ids
         'mask': loss_functions.dice_loss,
     }
     weights = {
-        'embedding': 1e-6 / 256.,
-        'autoencoder': 1e-6,
-        'mask': 1.,
+        'embedding': 1e-3 / 256,
+        'autoencoder': 1e-3,
+        'mask': 1,
     }
     model.compile(optimizer=optimizer, loss=loss, weights=weights)
 
@@ -74,8 +76,8 @@ def train_fold(model_name: str, fold: int, fold_size: int, file_ids: List[str]):
     model_name = f'{model_name}_{fold}'
     train_model(
         model_name=model_name,
-        initial_epoch=13,
-        final_epoch=25,
+        initial_epoch=14,
+        final_epoch=20,
         train_ids=train_ids,
         val_ids=val_ids,
     )
@@ -87,11 +89,9 @@ if __name__ == '__main__':
 
     _file_ids = [_name.split('/')[-1].split('.')[0] for _name in glob(f'{utils.TRAIN_DIR}/*.tiff')]
     _file_ids = list(sorted(_file_ids))
-    _test_ids = _file_ids[12:]
-    _file_ids = _file_ids[:12]
     train_fold(
         model_name='test_model',
-        fold=2,
+        fold=0,
         fold_size=3,
         file_ids=_file_ids,
     )

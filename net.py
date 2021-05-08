@@ -58,7 +58,7 @@ class HubmapMasker(keras.models.Model):
         args = list(zip(self.filters[:-1], skip_layers))
         for f, skip in reversed(args):
             x = keras.layers.UpSampling2D(size=(self.pool_size, self.pool_size))(x)
-            # x = keras.layers.Concatenate()([x, skip])
+            x = keras.layers.Concatenate()([x, skip])
             x = self._conv_block(x, f)
             x = keras.layers.SpatialDropout2D(self.dropout_rate)(x)
 
