@@ -5,6 +5,7 @@ from typing import Tuple
 
 import cv2
 import numpy
+import numpy as np
 import pandas
 import rasterio
 import tensorflow as tf
@@ -73,7 +74,7 @@ def _get_tile(tile_size, raster, layers, x1, x2, y1, y2, *, normalize: bool = Fa
         for channel in range(3):
             image[:, :, channel] = layers[channel].read(window=window)
 
-    return image / 255 if normalize else image
+    return np.asarray(image / 255, dtype=np.float32) if normalize else image
 
 
 def _filter_tissue(image) -> bool:
@@ -208,17 +209,36 @@ class TrainSequence(keras.utils.Sequence):
         for i, b in enumerate(indices):
             file_id, x1, x2, y1, y2, encoding = list(self.tiles_df.iloc[b])
             raster, layers = self.rasters[file_id]
-            images[i] = _get_tile(self.tile_size, raster, layers, x1, x2, y1, y2, normalize=True)
-            masks[i] = encoding_to_mask(encoding, (self.tile_size, self.tile_size))
+            image = _get_tile(self.tile_size, raster, layers, x1, x2, y1, y2, normalize=True)
+            mask = encoding_to_mask(encoding, (self.tile_size, self.tile_size))
+
+            flip = numpy.random.uniform()
+            if flip < 0.25:
+                image = numpy.flipud(image)
+                mask = numpy.flipud(mask)
+            elif 0.25 <= flip < 0.5:
+                image = numpy.fliplr(image)
+                mask = numpy.fliplr(mask)
+            elif 0.5 <= flip < 0.75:
+                image = numpy.rot90(image)
+                mask = numpy.rot90(mask)
+            else:
+                image = numpy.rot90(image, k=3)
+                mask = numpy.rot90(mask, k=3)
+
+            if numpy.random.uniform() < 0.25:
+                hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+                h, s, v = cv2.split(hsv_image)
+                s = np.clip(s * 1.5, 0, 1)
+                hsv_image = cv2.merge([h, s, v])
+                image = cv2.cvtColor(hsv_image, cv2.COLOR_HSV2BGR)
+
+            images[i] = image
+            masks[i] = mask
 
         images = tf.convert_to_tensor(images, dtype=tf.float32)
         masks = tf.convert_to_tensor(masks, dtype=tf.uint8)
-        ys = {
-            'embedding': masks,
-            'autoencoder': images,
-            'mask': masks,
-        }
-        return images, ys
+        return images, masks
 
 
 if __name__ == '__main__':
@@ -230,5 +250,5 @@ if __name__ == '__main__':
     _train_gen = TrainSequence(_file_ids[:1])
     print(len(_train_gen.glom_indices), len(_train_gen.blank_indices))
     print(len(_train_gen))
-    _images, _ys = _train_gen[len(_train_gen) - 1]
-    print(tf.shape(_images), tf.reduce_sum(_ys['mask'], axis=[1, 2]))
+    _images, _mask = _train_gen[len(_train_gen) - 1]
+    print(tf.shape(_images), tf.shape(_mask))

@@ -16,11 +16,11 @@ TILES_PATH = f'{RESULTS_DIR}/tiles'
 SUBMISSION_PATH = f'{ROOT_DIR}/submission.csv'
 
 GLOBALS = {
-    'tile_size': 512,
-    'batch_size': 4,
+    'tile_size': 256,
+    'batch_size': 8,
     's_threshold': 40,
-    'model_depth': 6,
-    'base_filters': 32,
+    'model_depth': 4,
+    'base_filters': 16,
 }
 GLOBALS['min_overlap'] = GLOBALS['tile_size'] // 8
 GLOBALS['p_threshold'] = 1000 * (GLOBALS['tile_size'] // 256) ** 2

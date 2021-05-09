@@ -1,10 +1,10 @@
 import numpy
 import tensorflow as tf
-from tensorflow import keras
 
 import utils
 
 
+@tf.function
 def _pairwise_distances_embeddings(embeddings: tf.Tensor):
     """ Pairwise distances between flat embeddings.
 
@@ -31,6 +31,7 @@ def _pairwise_distances_embeddings(embeddings: tf.Tensor):
     return distances
 
 
+@tf.function
 def _pairwise_distances_masks(masks: tf.Tensor):
     """ Pairwise distances between square masks.
 
@@ -43,6 +44,7 @@ def _pairwise_distances_masks(masks: tf.Tensor):
     return distances
 
 
+@tf.function
 def embedding_loss(masks: tf.Tensor, embeddings: tf.Tensor):
     """ Computes the loss for the embeddings.
 
@@ -77,9 +79,13 @@ def embedding_loss(masks: tf.Tensor, embeddings: tf.Tensor):
     return loss
 
 
+@tf.function
 def dice_coef(true_masks, pred_masks, smooth: float = 1e-8):
-    true_masks = tf.cast(true_masks, dtype=tf.float32)
-    pred_masks = tf.cast(pred_masks, dtype=tf.float32)
+    if true_masks.dtype != tf.float32:
+        true_masks = tf.cast(true_masks, dtype=tf.float32)
+
+    if pred_masks.dtype != tf.float32:
+        pred_masks = tf.cast(pred_masks, dtype=tf.float32)
 
     intersection = tf.reduce_sum(true_masks * pred_masks, axis=[1, 2])
     true_sum = tf.reduce_sum(true_masks, axis=[1, 2])
@@ -88,15 +94,83 @@ def dice_coef(true_masks, pred_masks, smooth: float = 1e-8):
     return dice
 
 
+@tf.function
 def dice_loss(true_masks, pred_masks, smooth: float = 1e-8):
     loss = 1. - dice_coef(true_masks, pred_masks, smooth)
     return loss
 
 
-def dice_bce(true_masks, pred_masks, smooth: float = 1e-8):
-    bce_loss = keras.losses.binary_crossentropy(true_masks, pred_masks)
-    bce_loss = tf.reduce_mean(bce_loss, axis=1)
-    return dice_loss(true_masks, pred_masks, smooth) + bce_loss
+# def stack_patches(masks, size: int = 7):
+#     batch_size, height, width = masks.shape[0], masks.shape[1], masks.shape[2]
+#
+#     def pad_patch(patch):
+#         full_patch = numpy.zeros(shape=(batch_size, size, size), dtype=numpy.float32)
+#         full_patch[:, :patch.shape[1], :patch.shape[2]] = patch
+#         return full_patch
+#
+#     return tf.stack(
+#         values=[tf.stack(
+#             values=[pad_patch(masks[:, row:(row + size), col:(col + size)]) for row in range(height)],
+#             axis=1,
+#         ) for col in range(width)],
+#         axis=2,
+#     )
+
+
+def numpy_dice_coef(true_masks, pred_masks, patch_size: int = 7, smooth: float = 1e-8):
+    batch_size, height, width = true_masks.shape[0], true_masks.shape[1], true_masks.shape[2]
+
+    def pad_patch(patch):
+        full_patch = numpy.zeros(shape=(batch_size, patch_size, patch_size), dtype=numpy.float32)
+        full_patch[:, :patch.shape[1], :patch.shape[2]] = patch
+        return full_patch
+
+    true_stack = numpy.stack(
+        arrays=[numpy.stack(
+            arrays=[pad_patch(true_masks[:, row:(row + patch_size), col:(col + patch_size)]) for row in range(height)],
+            axis=1,
+        ) for col in range(width)],
+        axis=2,
+    )
+    pred_stack = numpy.stack(
+        arrays=[numpy.stack(
+            arrays=[pad_patch(pred_masks[:, row:(row + patch_size), col:(col + patch_size)]) for row in range(height)],
+            axis=1,
+        ) for col in range(width)],
+        axis=2,
+    )
+
+    intersection = numpy.sum(true_stack * pred_stack, axis=(-1, -2))
+    true_sum = numpy.sum(true_stack, axis=(-1, -2))
+    pred_sum = numpy.sum(pred_stack, axis=(-1, -2))
+
+    return 2 * (intersection + smooth) / (true_sum + pred_sum + smooth)
+
+
+@tf.function
+def patchwise_dice_loss(true_masks: tf.Tensor, pred_masks: tf.Tensor, patch_size: int = 15, smooth: float = 1e-8):
+    if true_masks.dtype != tf.float32:
+        true_masks = tf.cast(true_masks, dtype=tf.float32)
+
+    if pred_masks.dtype != tf.float32:
+        pred_masks = tf.cast(pred_masks, dtype=tf.float32)
+
+    loss = tf.numpy_function(lambda *x: numpy_dice_coef(patch_size=patch_size, smooth=smooth, *x), [true_masks, pred_masks], tf.float32)
+    loss = tf.reduce_mean(1 - loss, axis=-1)
+    return loss
+
+
+@tf.function
+def dice_bce(true_masks, pred_masks, patch_size: int = 7, smooth: float = 1e-8):
+    bce_loss = tf.losses.binary_crossentropy(true_masks, pred_masks)
+    patch_loss = patchwise_dice_loss(true_masks, pred_masks, patch_size, smooth)
+
+    factor = tf.reduce_sum(bce_loss) / tf.reduce_sum(patch_loss)
+
+    bce_loss = bce_loss / factor
+    patch_loss = patch_loss * factor
+
+    return patch_loss + bce_loss
 
 
 # noinspection DuplicatedCode
@@ -151,7 +225,24 @@ def _test_embedding_loss():
     return
 
 
+def _test_patchwise_dice_coef():
+    batch_size, image_size = utils.GLOBALS['batch_size'], utils.GLOBALS['tile_size']
+    # batch_size, image_size = 1, 5
+
+    true_masks = numpy.random.randint(low=0, high=2, size=(batch_size, image_size, image_size), dtype=numpy.int8)
+    pred_masks = numpy.random.randint(low=0, high=2, size=(batch_size, image_size, image_size), dtype=numpy.int8)
+
+    tf_true_masks = tf.convert_to_tensor(true_masks, dtype=tf.float32)
+    tf_pred_masks = tf.convert_to_tensor(pred_masks, dtype=tf.float32)
+
+    loss = dice_bce(tf_true_masks, tf_pred_masks)
+    print(loss)
+    # print(tf.losses.binary_crossentropy(tf_true_masks, tf_pred_masks))
+    return
+
+
 if __name__ == '__main__':
     # _test_pairwise_distances_embeddings()
     # _test_pairwise_distances_masks()
-    _test_embedding_loss()
+    # _test_embedding_loss()
+    _test_patchwise_dice_coef()

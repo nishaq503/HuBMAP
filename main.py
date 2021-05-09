@@ -1,7 +1,11 @@
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 from glob import glob
 from typing import List
 
 import tensorflow as tf
+from tensorflow import keras
 
 import loss_functions
 import utils
@@ -24,7 +28,6 @@ def train_model(model_name: str, initial_epoch: int, final_epoch: int, train_ids
             filter_sizes=3,
             filters=filters,
             pool_size=2,
-            smoothing_size=3,
             dropout_rate=0.4,
         )
         model.save()
@@ -33,27 +36,14 @@ def train_model(model_name: str, initial_epoch: int, final_epoch: int, train_ids
     model.summary()
     # exit(1)
 
-    optimizer = keras.optimizers.Nadam()
-    loss = {
-        'embedding': loss_functions.embedding_loss,
-        'autoencoder': 'mse',
-        'mask': loss_functions.dice_loss,
-    }
-    weights = {
-        'embedding': 1e-3 / 256,
-        'autoencoder': 1e-3,
-        'mask': 1,
-    }
-    model.compile(optimizer=optimizer, loss=loss, weights=weights)
+    model.compile()
 
-    train_gen = TrainSequence(train_ids)
-    valid_gen = TrainSequence(val_ids)
     model.fit(
-        x=train_gen,
+        x=TrainSequence(train_ids),
         initial_epoch=initial_epoch,
         epochs=final_epoch,
         verbose=1,
-        validation_data=valid_gen,
+        validation_data=TrainSequence(val_ids),
     )
     model.save()
     return
@@ -76,8 +66,8 @@ def train_fold(model_name: str, fold: int, fold_size: int, file_ids: List[str]):
     model_name = f'{model_name}_{fold}'
     train_model(
         model_name=model_name,
-        initial_epoch=14,
-        final_epoch=20,
+        initial_epoch=0,
+        final_epoch=10,
         train_ids=train_ids,
         val_ids=val_ids,
     )
@@ -86,6 +76,9 @@ def train_fold(model_name: str, fold: int, fold_size: int, file_ids: List[str]):
 
 if __name__ == '__main__':
     # utils.delete_old()
+    # exit(1)
+
+    # epoch 1 started with dice coef = 0.1380
 
     _file_ids = [_name.split('/')[-1].split('.')[0] for _name in glob(f'{utils.TRAIN_DIR}/*.tiff')]
     _file_ids = list(sorted(_file_ids))

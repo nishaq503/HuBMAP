@@ -19,7 +19,6 @@ class HubmapMasker(keras.models.Model):
             filter_sizes: int,
             filters: List[int],
             pool_size: int,
-            smoothing_size: Optional[int],
             dropout_rate: float,
     ):
         super(HubmapMasker, self).__init__()
@@ -31,7 +30,6 @@ class HubmapMasker(keras.models.Model):
         self.filter_sizes = filter_sizes
         self.filters = filters
         self.pool_size = pool_size
-        self.smoothing_size = smoothing_size
         self.dropout_rate = dropout_rate
 
         # set up encoder
@@ -47,13 +45,6 @@ class HubmapMasker(keras.models.Model):
         else:
             x = self._conv_block(x, self.filters[-1], name='embedding')
 
-        encoder_output = x
-        self.encoder = keras.models.Model(
-            inputs=input_layer,
-            outputs=encoder_output,
-            name='encoder',
-        )
-
         # set up decoder
         args = list(zip(self.filters[:-1], skip_layers))
         for f, skip in reversed(args):
@@ -62,33 +53,13 @@ class HubmapMasker(keras.models.Model):
             x = self._conv_block(x, f)
             x = keras.layers.SpatialDropout2D(self.dropout_rate)(x)
 
-        autoencoder_output = x
-        autoencoder_output = self._conv_block(autoencoder_output, filters=3, name='autoencoder')
-        self.autoencoder = keras.models.Model(
-            inputs=input_layer,
-            outputs=autoencoder_output,
-            name='autoencoder',
-        )
-
         x = keras.layers.Conv2D(1, self.filter_sizes, padding='same')(x)
         x = keras.layers.BatchNormalization()(x)
-        if self.smoothing_size is not None:
-            x = keras.layers.Lambda(lambda arg: tfa.image.gaussian_filter2d(
-                image=arg,
-                filter_shape=self.smoothing_size,
-                padding='reflect',
-            ), name='smoothing')(x)
-        masker_output = keras.layers.Activation('sigmoid', name='mask')(x)
-
-        self.masker = keras.models.Model(
-            inputs=input_layer,
-            outputs=masker_output,
-            name='masker',
-        )
+        output_layer = keras.layers.Activation('sigmoid', name='mask')(x)
 
         self.model = keras.models.Model(
             inputs=input_layer,
-            outputs=[encoder_output, autoencoder_output, masker_output],
+            outputs=output_layer,
             name='model',
         )
 
@@ -105,38 +76,26 @@ class HubmapMasker(keras.models.Model):
         return x
 
     def call(self, inputs, training=None, mask=None):
-        return self.masker(inputs)
+        return self.model(inputs)
 
     def summary(self, **kwargs):
         return self.model.summary(**kwargs)
 
     # noinspection PyMethodOverriding
-    def compile(self, *, optimizer=None, loss=None, weights=None, metrics=None):
+    def compile(self, *, optimizer=None, loss=None, metrics=None):
         if optimizer is None:
             optimizer = keras.optimizers.Nadam(learning_rate=1e-2)
 
         if loss is None:
-            loss = {
-                'embedding': loss_functions.embedding_loss,
-                'autoencoder': 'mse',
-                'mask': loss_functions.dice_loss,
-            }
-
-        if weights is None:
-            weights = {
-                'embedding': 1. / 256.,
-                'autoencoder': 1.,
-                'mask': 1.,
-            }
+            loss = loss_functions.dice_bce
 
         if metrics is None:
-            metrics = {'mask': loss_functions.dice_coef}
+            metrics = loss_functions.dice_coef
 
         return self.model.compile(
             optimizer=optimizer,
             loss=loss,
-            loss_weights=weights,
-            metrics=metrics
+            metrics=metrics,
         )
 
     def fit(self, **kwargs):
@@ -161,7 +120,6 @@ class HubmapMasker(keras.models.Model):
             'filter_sizes': self.filter_sizes,
             'filters': self.filters,
             'pool_size': self.pool_size,
-            'smoothing_size': self.smoothing_size,
             'dropout_rate': self.dropout_rate,
         }
 
